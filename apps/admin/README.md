@@ -11,6 +11,7 @@ Next.js application for agent administration - create, update, delete, and trans
 - **Transfer Agent**: Transfer agent ownership to a new address
 - **List Agents**: View all registered agents
 
+
 ## Getting Started
 
 ```bash
