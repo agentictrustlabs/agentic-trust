@@ -1408,6 +1408,9 @@ export class AIAgentDiscoveryClient {
           : null,
       agentName: typeof a.agentName === 'string' ? a.agentName : undefined,
       agentTypes: Array.isArray((a as any).agentTypes) ? ((a as any).agentTypes as string[]) : undefined,
+      // Preserve the full identity list when present (new KB schema).
+      // This enables UIs to render one tab per identifier (e.g. multiple 8004 identities across chains).
+      identities: identitiesList ?? undefined,
       description:
         typeof a.agentDescription === 'string'
           ? a.agentDescription

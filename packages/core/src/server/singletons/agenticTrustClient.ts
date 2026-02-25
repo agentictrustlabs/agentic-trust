@@ -1190,6 +1190,8 @@ export class AgenticTrustClient {
       agentId: String(agent.agentId ?? parsed.uaid),
       agentName: String(agent.agentName ?? parsed.uaid),
       chainId: typeof agent.chainId === 'number' ? agent.chainId : 0,
+      // Preserve KB v2 identities list when present (newer schemas).
+      identities: Array.isArray((agent as any).identities) ? ((agent as any).identities as any[]) : null,
       agentAccount: String(agent.agentAccount ?? ''),
       agentIdentityOwnerAccount: String(agent.agentIdentityOwnerAccount ?? ''),
       eoaAgentIdentityOwnerAccount: (agent as any).eoaAgentIdentityOwnerAccount ?? null,

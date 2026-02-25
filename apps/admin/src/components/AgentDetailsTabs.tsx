@@ -58,29 +58,18 @@ type AgentDetailsTabsProps = {
   embedded?: boolean;
 };
 
-// Tab definitions - labels will be computed with counts from agent prop where applicable
-const ALL_TAB_DEFS = [
-  // Main identity tabs (ENS/HOL are conditionally shown)
-  { id: 'id8004', label: '8004' },
-  { id: 'id8122', label: '8122' },
-  { id: 'ens', label: 'ENS' },
-  { id: 'hol', label: 'HOL' },
-  // Opened via dialogs (not shown in the main tab bar)
+type TabId = string;
+type ModalTabId = 'feedback' | 'validation' | 'associations';
+
+const MODAL_TAB_DEFS = [
   { id: 'feedback', label: 'Reviews' },
   { id: 'validation', label: 'Validations' },
   { id: 'associations', label: 'Relationships' },
 ] as const;
 
-const MODAL_TAB_DEFS = ALL_TAB_DEFS.filter(
-  (t) => t.id === 'feedback' || t.id === 'validation' || t.id === 'associations',
-);
-
-type TabId = (typeof ALL_TAB_DEFS)[number]['id'];
-type ModalTabId = 'feedback' | 'validation' | 'associations';
-
 const MODAL_TAB_IDS: ModalTabId[] = ['feedback', 'validation', 'associations'];
 const isModalTab = (tabId: TabId): tabId is ModalTabId =>
-  (MODAL_TAB_IDS as unknown as string[]).includes(tabId);
+  (MODAL_TAB_IDS as unknown as string[]).includes(String(tabId));
 
 const shorten = (value?: string | null) => {
   if (!value) return '—';
@@ -99,7 +88,11 @@ function extractHexAddress(value: unknown): `0x${string}` | null {
 
 function getChainLabel(chainId: number | null | undefined): string {
   if (!chainId || !Number.isFinite(chainId)) return 'Unknown chain';
-  if (chainId === 1) return 'Mainnet';
+  // UI naming convention for identity tabs:
+  // - chainId=1: show "Eth" (not "Mainnet") so 8004 tabs read "8004 Eth #<id>"
+  // - chainId=8453: show "Base" so additional-chain 8004 tabs read "Base #<id>"
+  if (chainId === 1) return 'Eth';
+  if (chainId === 8453) return 'Base';
   if (chainId === 11155111) return 'Sepolia';
   if (chainId === 84532) return 'Base Sepolia';
   if (chainId === 11155420) return 'OP Sepolia';
@@ -374,7 +367,7 @@ const AgentDetailsTabs = ({
       case 'associations':
         return totalAssociationCount > 0 ? `Relationships (${totalAssociationCount})` : 'Relationships';
       default:
-        return ALL_TAB_DEFS.find((t) => t.id === tabId)?.label ?? tabId;
+        return String(tabId);
     }
   }, [feedbackCount, totalValidationCount, totalAssociationCount]);
 
@@ -764,10 +757,6 @@ const AgentDetailsTabs = ({
         overflow: 'hidden',
       };
 
-  const hasEnsIdentity = Boolean((agent as any).identityEnsDid || (agent as any).identityEnsDescriptorJson);
-  const hasHolIdentity = Boolean(
-    (agent as any).identityHolDid || (agent as any).identityHolUaid || (agent as any).identityHolDescriptorJson,
-  );
   const identity8122CollectionName = (() => {
     const id = (agent as any)?.identity8122;
     const v =
@@ -780,11 +769,6 @@ const AgentDetailsTabs = ({
   const didForRegistry = String((agent as any).identity8004Did ?? (agent as any).did ?? '').trim();
   const did8122ForRegistry = String((agent as any).identity8122Did ?? '').trim();
   const parsedRegistryFromUaid = parseRegistryFromUaid(uaid);
-  const has8004Registry = parsedRegistryFromUaid?.registryId === '8004' || didForRegistry.startsWith('did:8004:');
-  const has8122Registry =
-    parsedRegistryFromUaid?.registryId === '8122' ||
-    did8122ForRegistry.startsWith('did:8122:') ||
-    Boolean((agent as any).identity8122DescriptorJson || (agent as any).identity8122OnchainMetadataJson || (agent as any).identity8122);
   const SMART_AGENT_TYPE_IRIS = [
     'https://agentictrust.io/ontology/core#AISmartAgent',
     'https://agentictrust.io/ontology/erc8004#SmartAgent',
@@ -801,6 +785,219 @@ const AgentDetailsTabs = ({
     // Otherwise: treat as non-smart (prevents false positives on did:8004 agents).
     return false;
   })();
+
+  type IdentityTabKind = 'id8004' | 'id8122' | 'ens' | 'hol';
+  type IdentityTabDef = {
+    id: TabId;
+    label: string;
+    kind: IdentityTabKind;
+    did: string | null;
+    holUaid?: string | null;
+    descriptorJsonRaw: string | null;
+    onchainMetadataJsonRaw: string | null;
+    identityNode?: any;
+    serviceEndpoints?: any[] | null;
+    chainId?: number | null;
+    agentId?: string | null;
+  };
+
+  const parseDid8004Parts = (did: unknown): { chainId: number; agentId: string } | null => {
+    if (typeof did !== 'string') return null;
+    const m = /^did:8004:(\d+):(\d+)\b/.exec(did.trim());
+    if (!m) return null;
+    const chainId = Number(m[1]);
+    const agentId = String(m[2]);
+    if (!Number.isFinite(chainId) || !agentId) return null;
+    return { chainId, agentId };
+  };
+
+  const parseDid8122Parts = (did: unknown): { chainId: number; agentId: string } | null => {
+    if (typeof did !== 'string') return null;
+    const m = /^did:8122:(\d+):[^:]+:([^:]+)\b/.exec(did.trim());
+    if (!m) return null;
+    const chainId = Number(m[1]);
+    const agentId = String(m[2]);
+    if (!Number.isFinite(chainId) || !agentId) return null;
+    return { chainId, agentId };
+  };
+
+  const identityTabs = useMemo<IdentityTabDef[]>(() => {
+    const identitiesRaw = Array.isArray((agent as any)?.identities) ? ((agent as any).identities as any[]) : null;
+
+    const normalizeKind = (raw: unknown): IdentityTabKind | null => {
+      const k = String(raw ?? '').trim().toLowerCase();
+      if (!k) return null;
+      if (k === '8004' || k === 'erc8004') return 'id8004';
+      if (k === '8122' || k === 'erc8122') return 'id8122';
+      if (k === 'ens') return 'ens';
+      if (k === 'hol') return 'hol';
+      return null;
+    };
+
+    const buildLabel = (kind: IdentityTabKind, did: string | null, chainId?: number | null, agentId?: string | null): string => {
+      if (kind === 'id8004') {
+        const chainLabel = getChainLabel(chainId ?? null);
+        // UX convention:
+        // - Primary Ethereum 8004 identity tab: "8004 Eth #<id>"
+        // - Additional-chain 8004 identities: "8004 <Chain> #<id>" (e.g. "8004 Base #19151")
+        if (agentId) {
+          if (chainId === 1) return `8004 ${chainLabel} #${agentId}`;
+          return `8004 ${chainLabel} #${agentId}`;
+        }
+        if (chainId === 1) return `8004 ${chainLabel}`;
+        return `8004 ${chainLabel}`;
+      }
+      if (kind === 'id8122') {
+        const chainLabel = getChainLabel(chainId ?? null);
+        const base = identity8122CollectionName ? `${identity8122CollectionName}` : '8122';
+        return agentId ? `${base} ${chainLabel} #${agentId}` : `${base} ${chainLabel}`;
+      }
+      if (kind === 'ens') return 'ENS';
+      if (kind === 'hol') return 'HOL';
+      return shorten(did);
+    };
+
+    const out: IdentityTabDef[] = [];
+
+    if (identitiesRaw && identitiesRaw.length > 0) {
+      identitiesRaw.forEach((ident, idx) => {
+        const kind = normalizeKind(ident?.kind);
+        if (!kind) return;
+
+        const did =
+          kind === 'id8122'
+            ? (typeof ident?.did8122 === 'string' ? ident.did8122 : ident?.did)
+            : kind === 'ens'
+              ? (typeof ident?.didEns === 'string' ? ident.didEns : ident?.did)
+              : kind === 'hol'
+                ? (typeof ident?.didHol === 'string' ? ident.didHol : ident?.did)
+                : (typeof ident?.did8004 === 'string' ? ident.did8004 : ident?.did);
+
+        const didStr = typeof did === 'string' && did.trim() ? did.trim() : null;
+        const parsed =
+          kind === 'id8004' ? parseDid8004Parts(didStr) : kind === 'id8122' ? parseDid8122Parts(didStr) : null;
+        const chainId = parsed?.chainId ?? null;
+        const agentId = parsed?.agentId ?? null;
+
+        const descriptor = ident?.descriptor;
+        const descriptorJsonRaw =
+          typeof descriptor?.registrationJson === 'string' && descriptor.registrationJson.trim()
+            ? String(descriptor.registrationJson)
+            : null;
+        const onchainMetadataJsonRaw =
+          typeof descriptor?.nftMetadataJson === 'string' && descriptor.nftMetadataJson.trim()
+            ? String(descriptor.nftMetadataJson)
+            : null;
+
+        const holUaid =
+          kind === 'hol' && typeof ident?.uaidHOL === 'string' && ident.uaidHOL.trim() ? String(ident.uaidHOL) : null;
+
+        const id = `identity:${kind}:${chainId ?? 'na'}:${agentId ?? idx}`;
+        out.push({
+          id,
+          label: buildLabel(kind, didStr, chainId, agentId),
+          kind,
+          did: didStr,
+          holUaid,
+          descriptorJsonRaw,
+          onchainMetadataJsonRaw,
+          identityNode: ident,
+          serviceEndpoints: Array.isArray(ident?.serviceEndpoints) ? (ident.serviceEndpoints as any[]) : null,
+          chainId,
+          agentId,
+        });
+      });
+    }
+
+    // Fallback: legacy per-identity fields (singletons).
+    if (out.length === 0) {
+      const pushLegacy = (kind: IdentityTabKind, did: unknown, descriptorJsonRaw: unknown, onchainMetadataJsonRaw: unknown, holUaid?: unknown, identityNode?: unknown) => {
+        const didStr = typeof did === 'string' && did.trim() ? did.trim() : null;
+        const parsed =
+          kind === 'id8004' ? parseDid8004Parts(didStr) : kind === 'id8122' ? parseDid8122Parts(didStr) : null;
+        const chainId = parsed?.chainId ?? (kind === 'id8004' ? (typeof agent.chainId === 'number' ? agent.chainId : null) : null);
+        const agentId = parsed?.agentId ?? (kind === 'id8004' ? (agent.agentId ? String(agent.agentId) : null) : null);
+        const id = `identity:${kind}:${chainId ?? 'na'}:${agentId ?? kind}`;
+        out.push({
+          id,
+          label: buildLabel(kind, didStr, chainId ?? null, agentId ?? null),
+          kind,
+          did: didStr,
+          holUaid: typeof holUaid === 'string' && holUaid.trim() ? holUaid.trim() : null,
+          descriptorJsonRaw: typeof descriptorJsonRaw === 'string' ? descriptorJsonRaw : null,
+          onchainMetadataJsonRaw: typeof onchainMetadataJsonRaw === 'string' ? onchainMetadataJsonRaw : null,
+          identityNode: identityNode as any,
+          serviceEndpoints: null,
+          chainId: typeof chainId === 'number' ? chainId : null,
+          agentId: agentId ?? null,
+        });
+      };
+
+      pushLegacy(
+        'id8004',
+        (agent as any).identity8004Did ?? agent.did ?? null,
+        (agent as any).identity8004DescriptorJson ?? (agent as any).rawJson ?? null,
+        (agent as any).identity8004OnchainMetadataJson ?? (agent as any).onchainMetadataJson ?? null,
+        null,
+        (agent as any).identity8004 ?? null,
+      );
+      if ((agent as any).identity8122Did || (agent as any).identity8122DescriptorJson || (agent as any).identity8122) {
+        pushLegacy(
+          'id8122',
+          (agent as any).identity8122Did ?? null,
+          (agent as any).identity8122DescriptorJson ?? null,
+          (agent as any).identity8122OnchainMetadataJson ?? null,
+          null,
+          (agent as any).identity8122 ?? null,
+        );
+      }
+      if ((agent as any).identityEnsDid || (agent as any).identityEnsDescriptorJson || (agent as any).identityEns) {
+        pushLegacy(
+          'ens',
+          (agent as any).identityEnsDid ?? null,
+          (agent as any).identityEnsDescriptorJson ?? null,
+          (agent as any).identityEnsOnchainMetadataJson ?? null,
+          null,
+          (agent as any).identityEns ?? null,
+        );
+      }
+      if ((agent as any).identityHolDid || (agent as any).identityHolDescriptorJson || (agent as any).identityHolUaid || (agent as any).identityHol) {
+        pushLegacy(
+          'hol',
+          (agent as any).identityHolDid ?? null,
+          (agent as any).identityHolDescriptorJson ?? null,
+          (agent as any).identityHolOnchainMetadataJson ?? null,
+          (agent as any).identityHolUaid ?? null,
+          (agent as any).identityHol ?? null,
+        );
+      }
+    }
+
+    // Stable ordering: 8004 (all), 8122, ENS, HOL.
+    const rank = (k: IdentityTabKind) => (k === 'id8004' ? 0 : k === 'id8122' ? 1 : k === 'ens' ? 2 : 3);
+    return [...out].sort((a, b) => {
+      const byKind = rank(a.kind) - rank(b.kind);
+      if (byKind !== 0) return byKind;
+      const aChain = typeof a.chainId === 'number' ? a.chainId : 0;
+      const bChain = typeof b.chainId === 'number' ? b.chainId : 0;
+      if (aChain !== bChain) return aChain - bChain;
+      const aId = String(a.agentId ?? '');
+      const bId = String(b.agentId ?? '');
+      return aId.localeCompare(bId);
+    });
+  }, [agent, identity8122CollectionName]);
+
+  const hasEnsIdentity = identityTabs.some((t) => t.kind === 'ens');
+  const hasHolIdentity = identityTabs.some((t) => t.kind === 'hol');
+  const has8004Registry =
+    parsedRegistryFromUaid?.registryId === '8004' ||
+    didForRegistry.startsWith('did:8004:') ||
+    identityTabs.some((t) => t.kind === 'id8004' && String(t.did ?? '').startsWith('did:8004:'));
+  const has8122Registry =
+    parsedRegistryFromUaid?.registryId === '8122' ||
+    did8122ForRegistry.startsWith('did:8122:') ||
+    identityTabs.some((t) => t.kind === 'id8122' && String(t.did ?? '').startsWith('did:8122:')) ||
+    Boolean((agent as any).identity8122DescriptorJson || (agent as any).identity8122OnchainMetadataJson || (agent as any).identity8122);
 
   const smartAgentAccountRaw = (agent as any)?.smartAgentAccount ?? null;
   const smartAccountAddress = useMemo(() => {
@@ -852,31 +1049,10 @@ const AgentDetailsTabs = ({
     };
   }, [smartAccountAddress, smartAccountChainId, smartAccountOwnerHint]);
 
-  const mainTabDefs = useMemo(() => {
-    const did = (agent as any).identity8004Did ?? agent.did ?? null;
-    const descriptor = parseJsonObject((agent as any).identity8004DescriptorJson ?? (agent as any).rawJson ?? null) ?? {};
-    const parsedDid = parseRegistryFromUaid(uaid) ?? parseRegistryFromDid(did);
-    const chainIdForRegistry =
-      parsedDid?.chainId ??
-      (typeof agent.chainId === 'number' && Number.isFinite(agent.chainId) && agent.chainId > 0 ? agent.chainId : null) ??
-      parseChainIdFromUaid(uaid);
-    const chainLabel = getChainLabel(chainIdForRegistry);
-    const tabs: Array<{ id: TabId; label: string }> = [];
-    if (has8004Registry) {
-      tabs.push({ id: 'id8004', label: isSmartAgent ? `Smart Agent (8004 ${chainLabel})` : `8004 ${chainLabel}` });
-    } else {
-      tabs.push({ id: 'id8004', label: isSmartAgent ? `Smart Agent (${chainLabel})` : `Agent (${chainLabel})` });
-    }
-    if (has8122Registry) {
-      tabs.push({
-        id: 'id8122',
-        label: identity8122CollectionName ? `${identity8122CollectionName} (8122 ${chainLabel})` : `8122 ${chainLabel}`,
-      });
-    }
-    if (hasEnsIdentity) tabs.push({ id: 'ens', label: 'ENS' });
-    if (hasHolIdentity) tabs.push({ id: 'hol', label: 'HOL' });
-    return tabs;
-  }, [agent, uaid, hasEnsIdentity, hasHolIdentity, isSmartAgent, has8004Registry, has8122Registry, identity8122CollectionName]);
+  const mainTabDefs = useMemo(
+    () => identityTabs.map((t) => ({ id: t.id, label: t.label })),
+    [identityTabs],
+  );
 
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
   const registerProtocols = useMemo(
@@ -919,10 +1095,11 @@ const AgentDetailsTabs = ({
 
   useEffect(() => {
     if (renderOnlyTab) return;
-    if (activeTab === 'ens' && !hasEnsIdentity) setActiveTab('id8004');
-    if (activeTab === 'hol' && !hasHolIdentity) setActiveTab('id8004');
-    if (activeTab === 'id8122' && !has8122Registry) setActiveTab('id8004');
-  }, [activeTab, hasEnsIdentity, hasHolIdentity, renderOnlyTab]);
+    if (mainTabDefs.length === 0) return;
+    if (!mainTabDefs.some((t) => t.id === activeTab)) {
+      setActiveTab(mainTabDefs[0]!.id);
+    }
+  }, [activeTab, mainTabDefs, renderOnlyTab]);
 
   const extractServiceEndpointFromDescriptorJson = useCallback(
     (descriptorJson: string | null | undefined, serviceName: string): string | null => {
@@ -951,32 +1128,49 @@ const AgentDetailsTabs = ({
     [],
   );
 
-  const identityTab = activeTab === 'ens' || activeTab === 'hol' || activeTab === 'id8004' || activeTab === 'id8122' ? activeTab : 'id8004';
+  const activeIdentity = useMemo(
+    () => identityTabs.find((t) => t.id === activeTab) ?? identityTabs[0] ?? null,
+    [activeTab, identityTabs],
+  );
+
+  const identityTab: 'id8004' | 'id8122' | 'ens' | 'hol' = (activeIdentity?.kind ?? 'id8004') as any;
   const identityDid =
-    identityTab === 'ens'
+    activeIdentity?.did ??
+    (identityTab === 'ens'
       ? ((agent as any).identityEnsDid ?? null)
       : identityTab === 'hol'
         ? ((agent as any).identityHolDid ?? null)
         : identityTab === 'id8122'
           ? ((agent as any).identity8122Did ?? null)
-          : ((agent as any).identity8004Did ?? agent.did ?? null);
-  const identityHolUaid = identityTab === 'hol' ? ((agent as any).identityHolUaid ?? null) : null;
+          : ((agent as any).identity8004Did ?? agent.did ?? null));
+  const identityHolUaid = identityTab === 'hol' ? (activeIdentity?.holUaid ?? (agent as any).identityHolUaid ?? null) : null;
   const identityDescriptorJsonRaw =
-    identityTab === 'ens'
+    activeIdentity?.descriptorJsonRaw ??
+    (identityTab === 'ens'
       ? ((agent as any).identityEnsDescriptorJson ?? null)
       : identityTab === 'hol'
         ? ((agent as any).identityHolDescriptorJson ?? null)
         : identityTab === 'id8122'
           ? ((agent as any).identity8122DescriptorJson ?? null)
-          : ((agent as any).identity8004DescriptorJson ?? (agent as any).rawJson ?? null);
+          : ((agent as any).identity8004DescriptorJson ?? (agent as any).rawJson ?? null));
   const identityOnchainMetadataJsonRaw =
-    identityTab === 'ens'
+    activeIdentity?.onchainMetadataJsonRaw ??
+    (identityTab === 'ens'
       ? ((agent as any).identityEnsOnchainMetadataJson ?? null)
       : identityTab === 'hol'
         ? ((agent as any).identityHolOnchainMetadataJson ?? null)
         : identityTab === 'id8122'
           ? ((agent as any).identity8122OnchainMetadataJson ?? null)
-          : ((agent as any).identity8004OnchainMetadataJson ?? (agent as any).onchainMetadataJson ?? null);
+          : ((agent as any).identity8004OnchainMetadataJson ?? (agent as any).onchainMetadataJson ?? null));
+
+  const identityParsed8004 = useMemo(
+    () => (identityTab === 'id8004' ? parseDid8004Parts(identityDid) : null),
+    [identityDid, identityTab],
+  );
+  const identityParsed8122 = useMemo(
+    () => (identityTab === 'id8122' ? parseDid8122Parts(identityDid) : null),
+    [identityDid, identityTab],
+  );
 
   const identityDescriptor = useMemo(
     () => parseJsonObject(identityDescriptorJsonRaw),
@@ -1013,7 +1207,12 @@ const AgentDetailsTabs = ({
   }, [identityOnchainMetadata, identityTab]);
 
   const extractKbServiceUrl = useCallback((serviceName: string): string | null => {
-    const endpoints = (agent as any)?.serviceEndpoints;
+    const endpoints =
+      activeIdentity?.serviceEndpoints ??
+      (Array.isArray((activeIdentity as any)?.identityNode?.serviceEndpoints)
+        ? (((activeIdentity as any).identityNode as any).serviceEndpoints as any[])
+        : null) ??
+      ((agent as any)?.serviceEndpoints as any);
     if (!Array.isArray(endpoints)) return null;
     const target = serviceName.trim().toLowerCase();
     for (const ep of endpoints) {
@@ -1044,7 +1243,7 @@ const AgentDetailsTabs = ({
     if (identityTab !== 'id8004') return null;
     const parsedFromUaid = parseRegistryFromUaid(uaid);
     const parsedDid = parseRegistryFromDid(identityDid);
-    const parsed = parsedFromUaid ?? parsedDid;
+    const parsed = parsedDid ?? parsedFromUaid;
     // If this agent has no 8004/8122 registry identity, don't show a registry badge at all.
     if (!parsed) return null;
     const registryNamespace =
@@ -1155,7 +1354,7 @@ const AgentDetailsTabs = ({
 
       {/* Tab Content */}
       <div style={{ padding: embedded ? 0 : identityPadding }}>
-        {(activeTab === 'id8004' || activeTab === 'id8122' || activeTab === 'ens' || activeTab === 'hol') && (
+        {!isModalTab(activeTab) && activeIdentity && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: identityGap }}>
             <div
               style={{
@@ -1183,22 +1382,24 @@ const AgentDetailsTabs = ({
                       <div>
                         <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>UAID</strong>
                         <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
-                          {uaid ?? '—'}
+                          {(identityDid ? `uaid:${identityDid}` : uaid) ?? '—'}
                         </div>
                       </div>
                       <div>
                         <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>DID</strong>
                         <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
-                          {agent.did ?? '—'}
+                          {identityDid ?? agent.did ?? '—'}
                         </div>
                       </div>
                       <div>
                         <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Chain</strong>
                         <div style={{ color: palette.textPrimary }}>
                           {getChainLabel(
-                            (typeof agent.chainId === 'number' && Number.isFinite(agent.chainId) && agent.chainId > 0
-                              ? agent.chainId
-                              : null) ?? parseChainIdFromUaid(uaid),
+                            identityParsed8004?.chainId ??
+                              (typeof agent.chainId === 'number' && Number.isFinite(agent.chainId) && agent.chainId > 0
+                                ? agent.chainId
+                                : null) ??
+                              parseChainIdFromUaid(uaid),
                           )}
                         </div>
                       </div>
@@ -1208,17 +1409,17 @@ const AgentDetailsTabs = ({
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
                         <div>
                           <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Agent ID</strong>
-                          <div style={{ fontFamily: 'monospace', color: palette.textPrimary }}>{agent.agentId}</div>
+                          <div style={{ fontFamily: 'monospace', color: palette.textPrimary }}>{identityParsed8004?.agentId ?? agent.agentId}</div>
                         </div>
                         <div>
                           <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Chain</strong>
-                          <div style={{ color: palette.textPrimary }}>{agent.chainId}</div>
+                          <div style={{ color: palette.textPrimary }}>{identityParsed8004?.chainId ?? agent.chainId}</div>
                         </div>
                       </div>
                       <div>
                         <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>UAID</strong>
                         <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
-                          {uaid ?? '—'}
+                          {(identityDid ? `uaid:${identityDid}` : uaid) ?? '—'}
                         </div>
                       </div>
                     </div>
@@ -1271,7 +1472,9 @@ const AgentDetailsTabs = ({
                     )}
                     <div>
                       <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Chain</strong>
-                      <div style={{ color: palette.textPrimary }}>{agent.chainId || '—'}</div>
+                      <div style={{ color: palette.textPrimary }}>
+                        {identityTab === 'id8122' ? (identityParsed8122?.chainId ?? '—') : '—'}
+                      </div>
                     </div>
                   </div>
                 )}

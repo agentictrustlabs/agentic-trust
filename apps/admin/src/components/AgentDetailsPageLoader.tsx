@@ -247,6 +247,12 @@ export default function AgentDetailsPageLoader({ uaid }: Props) {
       trustLedgerCapabilityRank: d?.trustLedgerCapabilityRank ?? null,
       serviceEndpoints: Array.isArray(d?.serviceEndpoints) ? d.serviceEndpoints : null,
       identity8122: d?.identity8122 ?? null,
+      identities:
+        Array.isArray((d as any)?.identities)
+          ? ((d as any).identities as any[])
+          : Array.isArray((d as any)?.discovery?.identities)
+            ? (((d as any).discovery as any).identities as any[])
+            : null,
     };
 
     const heroImageSrc = normalizeResourceUrl(serializedAgent.image) ?? shadowAgentSrc;

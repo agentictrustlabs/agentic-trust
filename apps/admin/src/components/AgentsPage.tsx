@@ -128,6 +128,11 @@ export type AgentsPageAgent = {
    * Returned by kbAgentByUaid.serviceEndpoints and used by Agent Details.
    */
   serviceEndpoints?: unknown[] | null;
+  /**
+   * KB v2 identities list (newer schemas).
+   * When present, contains one entry per identifier (e.g. multiple 8004 identities across chains).
+   */
+  identities?: unknown[] | null;
 };
 
 type Agent = AgentsPageAgent;
