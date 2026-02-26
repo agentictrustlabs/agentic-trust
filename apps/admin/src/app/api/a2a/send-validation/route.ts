@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { a2aEndpoint, skillId, message, payload, metadata } = body;
 
+    
     if (!a2aEndpoint) {
       return NextResponse.json(
         { error: 'A2A agent card URL (agent-card.json) is required' },
