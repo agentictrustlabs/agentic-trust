@@ -5,7 +5,7 @@
  */
 // ERC-8004 Agentic Trust SDK exports
 // Re-export all ERC-8004 functionality for convenience
-export { AIAgentENSClient, AIAgentL2ENSDurenClient, AIAgentL2ENSNamespaceClient, AIAgentIdentityClient, AIAgentReputationClient, OrgIdentityClient, } from '@agentic-trust/8004-ext-sdk';
+export { AIAgentENSClient, AIAgentL2ENSDurenClient, AIAgentL2ENSNamespaceClient, AIAgentIdentityClient, AIAgentReputationClient, OrgIdentityClient, } from '@agentic-trust/agentic-trust-sdk';
 // Export AccountProvider types from erc8004-sdk for convenience
 export { ViemAccountProvider, } from '@agentic-trust/8004-sdk';
 export { 

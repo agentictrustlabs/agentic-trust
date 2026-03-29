@@ -4,7 +4,7 @@ import {
   resolveDid8004,
   type BuildDid8004Options,
   type ParsedDid8004,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 
 function normalizeDidInput(value: string): string {
   if (!value) {

@@ -1,4 +1,4 @@
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 
 async function getAccountNonce(accountClient: any): Promise<bigint | undefined> {
   if (typeof accountClient?.getNonce === 'function') {
@@ -57,7 +57,7 @@ import {
   AIAgentIdentityClient,
   type AgentData,
   type GiveFeedbackParams,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 import {
   ViemAccountProvider,
   BaseIdentityClient,
@@ -83,7 +83,7 @@ import { buildDidEthr } from '../../shared/didEthr';
 import { createPublicClient, encodeFunctionData, http } from 'viem';
 import type { Address } from 'viem';
 import { getAdminApp } from '../userApps/adminApp';
-import IdentityRegistryABIJson from '@agentic-trust/8004-ext-sdk/abis/IdentityRegistry.json';
+import IdentityRegistryABIJson from '@agentic-trust/agentic-trust-sdk/abis/IdentityRegistry.json';
 import { Implementation, toMetaMaskSmartAccount } from '@metamask/smart-accounts-kit';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { addToL1OrgPK } from './names';

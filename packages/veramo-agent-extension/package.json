@@ -1,6 +1,6 @@
 {
   "name": "@agentic-trust/veramo-agent-extension",
-  "version": "1.0.42",
+  "version": "1.0.44",
   "description": "Veramo agent extensions for agent-to-agent and account abstraction support",
   "type": "module",
   "main": "./dist/index.js",
@@ -39,7 +39,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@agentic-trust/8004-ext-sdk": "workspace:*",
+    "@agentic-trust/agentic-trust-sdk": "workspace:*",
     "@veramo/core": "^6.0.0",
     "@veramo/core-types": "^6.0.0",
     "@veramo/did-manager": "^6.0.0",

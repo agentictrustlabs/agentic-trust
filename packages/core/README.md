@@ -120,14 +120,14 @@ server-side use cases:
 ### ERC-8004 Integration
 
 In addition to the `AgenticTrustClient` façade, you can still use the lower-level
-ERC‑8004 domain clients directly via `@agentic-trust/8004-ext-sdk` and
+ERC‑8004 domain clients directly via `@agentic-trust/agentic-trust-sdk` and
 `@agentic-trust/8004-sdk` (Identity, ENS, Reputation, etc.). The core server
 entrypoint (`@agentic-trust/core/server`) wires these for you via singletons
 such as `getIdentityRegistryClient`, `getENSClient`, and `getReputationRegistryClient`.
 
 ## Dependencies
 
-- `@agentic-trust/8004-ext-sdk` - ERC-8004 Agentic Trust SDK (workspace dependency)
+- `@agentic-trust/agentic-trust-sdk` - Agentic Trust SDK (workspace dependency)
   - `@agentic-trust/8004-sdk` - Base ERC-8004 SDK (workspace dependency)
 
 ## License

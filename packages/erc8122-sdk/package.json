@@ -1,7 +1,6 @@
 {
   "name": "@agentic-trust/8122-sdk",
-  "version": "0.0.1",
-  "private": true,
+  "version": "1.0.44",
   "description": "ERC-8122 Agent Registry SDK - ABIs + helpers for interacting with ERC-8122 registries/registrars",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,6 +26,8 @@
   },
   "peerDependencies": {
     "viem": ">=2.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
-

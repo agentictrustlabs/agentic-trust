@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { AIAgentDiscoveryClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentDiscoveryClient } from '@agentic-trust/agentic-trust-sdk';
 
 function normalizeDiscoveryUrl(value: string | undefined | null): string | null {
   const raw = (value || '').toString().trim().replace(/\/+$/, '');

@@ -22,8 +22,8 @@ import {
 } from '@metamask/smart-accounts-kit';
 // @ts-ignore - contracts subpath may not be in main type definitions
 import { DelegationManager } from '@metamask/smart-accounts-kit/contracts';
-import IdentityRegistryAbi from '@agentic-trust/8004-ext-sdk/abis/IdentityRegistry.json';
-import ValidationRegistryAbi from '@agentic-trust/8004-ext-sdk/abis/ValidationRegistry.json';
+import IdentityRegistryAbi from '@agentic-trust/agentic-trust-sdk/abis/IdentityRegistry.json';
+import ValidationRegistryAbi from '@agentic-trust/agentic-trust-sdk/abis/ValidationRegistry.json';
 
 import { SessionPackage } from '../shared/sessionPackage';
 import {

@@ -1,4 +1,4 @@
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 async function getAccountNonce(accountClient) {
     if (typeof accountClient?.getNonce === 'function') {
         try {
@@ -34,7 +34,7 @@ async function sendUserOpWithTimeout(params) {
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for UserOperation')), timeoutMs)),
     ]);
 }
-import { AIAgentIdentityClient, } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentIdentityClient, } from '@agentic-trust/agentic-trust-sdk';
 import { ViemAccountProvider, BaseIdentityClient, } from '@agentic-trust/8004-sdk';
 import { Agent } from './agent';
 import { getDiscoveryClient } from '../singletons/discoveryClient';
@@ -45,7 +45,7 @@ import { generateHcs14UaidDidTarget } from './uaid';
 import { buildDidEthr } from '../../shared/didEthr';
 import { createPublicClient, encodeFunctionData, http } from 'viem';
 import { getAdminApp } from '../userApps/adminApp';
-import IdentityRegistryABIJson from '@agentic-trust/8004-ext-sdk/abis/IdentityRegistry.json';
+import IdentityRegistryABIJson from '@agentic-trust/agentic-trust-sdk/abis/IdentityRegistry.json';
 import { Implementation, toMetaMaskSmartAccount } from '@metamask/smart-accounts-kit';
 import { createBundlerClient } from 'viem/account-abstraction';
 import { addToL1OrgPK } from './names';

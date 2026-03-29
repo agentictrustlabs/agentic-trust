@@ -4,8 +4,8 @@ import { toHex } from 'viem';
 import { toMetaMaskSmartAccount, Implementation, createDelegation, getSmartAccountsEnvironment, ExecutionMode, } from '@metamask/smart-accounts-kit';
 // @ts-ignore - contracts subpath may not be in main type definitions
 import { DelegationManager } from '@metamask/smart-accounts-kit/contracts';
-import IdentityRegistryAbi from '@agentic-trust/8004-ext-sdk/abis/IdentityRegistry.json';
-import ValidationRegistryAbi from '@agentic-trust/8004-ext-sdk/abis/ValidationRegistry.json';
+import IdentityRegistryAbi from '@agentic-trust/agentic-trust-sdk/abis/IdentityRegistry.json';
+import ValidationRegistryAbi from '@agentic-trust/agentic-trust-sdk/abis/ValidationRegistry.json';
 import { getChainRpcUrl, getChainBundlerUrl, getChainIdHex, getChainConfig, getChainById, } from '../server/lib/chainConfig';
 import { sendSponsoredUserOperation, waitForUserOperationReceipt } from './accountClient';
 // Derive selector from ABI to avoid signature drift (prevents AllowedMethodsEnforcer:method-not-allowed).

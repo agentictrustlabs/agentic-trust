@@ -36,7 +36,7 @@ The first public “Agent Trust Graphs” for ERC-8004 agents are live, letting 
 agentic-trust/
 ├── packages/
 │   ├── core/              # Core SDK - AgenticTrustClient, singletons, A2A protocol
-│   ├── erc8004-agentic-trust-sdk/  # ERC-8004 SDK integration
+│   ├── agentic-trust-sdk/  # Agentic Trust SDK (ERC-8004 extensions)
 │   └── erc8004-sdk/       # ERC-8004 SDK adapters
 ├── apps/
 │   ├── web/               # Next.js web client application
@@ -233,7 +233,7 @@ AGENTIC_TRUST_RPC_URL_OPTIMISM_SEPOLIA=https://sepolia.optimism.io
 The `packages/` directory contains reusable libraries and SDKs:
 
 - **`core/`**: Core SDK with `AgenticTrustClient`, singletons, and A2A protocol
-- **`erc8004-agentic-trust-sdk/`**: ERC-8004 SDK integration for reputation system
+- **`agentic-trust-sdk/`**: Agentic Trust SDK (ERC-8004 extensions)
 - **`erc8004-sdk/`**: ERC-8004 SDK adapters (Viem, Ethers)
 
 ### Apps

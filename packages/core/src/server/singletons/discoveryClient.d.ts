@@ -4,7 +4,7 @@
  * Manages a singleton instance of AIAgentDiscoveryClient
  * Initialized from environment variables or AgenticTrustClient config
  */
-import { AIAgentDiscoveryClient, type AIAgentDiscoveryClientConfig } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentDiscoveryClient, type AIAgentDiscoveryClientConfig } from '@agentic-trust/agentic-trust-sdk';
 /**
  * Get or create the AIAgentDiscoveryClient singleton
  * Initializes from environment variables or provided config

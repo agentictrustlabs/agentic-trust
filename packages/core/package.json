@@ -1,6 +1,6 @@
 {
   "name": "@agentic-trust/core",
-  "version": "1.0.42",
+  "version": "1.0.44",
   "description": "Core SDK for agentic trust systems",
   "type": "module",
   "main": "./dist/index.js",
@@ -30,7 +30,7 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {
-    "@agentic-trust/8004-ext-sdk": "workspace:*",
+    "@agentic-trust/agentic-trust-sdk": "workspace:*",
     "@agentic-trust/8004-sdk": "workspace:*",
     "@agentic-trust/8122-sdk": "workspace:*",
     "@agentic-trust/8092-sdk": "workspace:*",

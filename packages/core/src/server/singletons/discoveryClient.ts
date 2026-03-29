@@ -8,7 +8,7 @@
 import {
   AIAgentDiscoveryClient,
   type AIAgentDiscoveryClientConfig,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 import { DomainClient } from './domainClient';
 
 type DiscoveryKey = 'global';

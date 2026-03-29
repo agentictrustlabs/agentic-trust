@@ -6,7 +6,7 @@
  * knowing the underlying protocol implementation.
  */
 import { A2AProtocolProvider } from './a2aProtocolProvider';
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 import { getProviderApp } from '../userApps/providerApp';
 import { getReputationRegistryClient } from '../singletons/reputationClient';
 import { getIPFSStorage } from './ipfs';

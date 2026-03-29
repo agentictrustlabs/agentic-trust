@@ -4,7 +4,7 @@
  * Manages a singleton instance of AIAgentDiscoveryClient
  * Initialized from environment variables or AgenticTrustClient config
  */
-import { AIAgentDiscoveryClient, } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentDiscoveryClient, } from '@agentic-trust/agentic-trust-sdk';
 import { DomainClient } from './domainClient';
 class DiscoveryDomainClient extends DomainClient {
     constructor() {

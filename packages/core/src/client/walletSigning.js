@@ -6,7 +6,7 @@
  */
 import { createWalletClient, custom, createPublicClient, getAddress, } from 'viem';
 import { http, isAddressEqual } from 'viem';
-import { AIAgentIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 import { getChainById, DEFAULT_CHAIN_ID, getChainRpcUrl, getChainBundlerUrl, sepolia, baseSepolia, optimismSepolia, isL1, isL2, isPrivateKeyMode, } from '../server/lib/chainConfig';
 import { getDeployedAccountClientByAgentName, sendSponsoredUserOperation, waitForUserOperationReceipt, } from './accountClient';
 import { createAgent as callCreateAgentEndpoint, updateAgentRegistration as callUpdateAgentRegistrationEndpoint, } from '../api/agents/client';

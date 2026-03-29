@@ -4,7 +4,7 @@
  * Manages a singleton instance of AIAgentENSClient
  * Initialized from environment variables using AccountProvider
  */
-import { AIAgentENSClient, AIAgentL2ENSDurenClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentENSClient, AIAgentL2ENSDurenClient } from '@agentic-trust/agentic-trust-sdk';
 import { sepolia, baseSepolia, optimismSepolia } from '../lib/chainConfig';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { createBundlerClient } from 'viem/account-abstraction';

@@ -3486,6 +3486,85 @@ export class AIAgentDiscoveryClient {
   }
 
   /**
+   * Get agents on a specific chain whose agent account is owned/controlled by a given EOA.
+   *
+   * This calls the KB field `kbAgents(where: { chainId, agentAccountOwnerAddress })` and returns
+   * the raw KB-mapped AgentData objects.
+   *
+   * NOTE: Requires the discovery KB backend schema to support `KbAgentWhereInput.agentAccountOwnerAddress`.
+   */
+  async getAgentsByAgentAccountOwnerEoa(
+    chainId: number,
+    eoaAddress: string,
+    options?: {
+      first?: number;
+      skip?: number;
+      orderBy?: 'agentId8004' | 'agentName' | 'uaid' | 'createdAtTime' | 'updatedAtTime' | 'trustLedgerTotalPoints';
+      orderDirection?: 'ASC' | 'DESC';
+      includeIdentityAndAccounts?: boolean;
+    },
+  ): Promise<{ agents: AgentData[]; total: number; hasMore: boolean }> {
+    const cid = Number(chainId);
+    if (!Number.isFinite(cid) || cid <= 0) {
+      throw new Error('Invalid chainId. Must be a positive number.');
+    }
+
+    const eoa = String(eoaAddress ?? '').trim();
+    if (!/^0x[a-fA-F0-9]{40}$/.test(eoa)) {
+      throw new Error('Invalid EOA address. Must be a 0x-prefixed 20-byte hex address.');
+    }
+
+    const first = Math.max(1, Math.floor(options?.first ?? 25));
+    const skip = Math.max(0, Math.floor(options?.skip ?? 0));
+    const orderDirection: 'ASC' | 'DESC' =
+      (options?.orderDirection ?? 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    const orderBy = options?.orderBy ?? 'updatedAtTime';
+    const orderByKb =
+      (await this.pickKbAgentOrderBy([orderBy, 'updatedAtTime', 'createdAtTime', 'uaid', 'agentName'])) ?? 'agentName';
+
+    const includeIdentityAndAccounts = options?.includeIdentityAndAccounts ?? true;
+    const selection = await this.getKbAgentSelection({ includeIdentityAndAccounts });
+
+    const query = `
+      query OwnedByOwnerEoa(
+        $where: KbAgentWhereInput
+        $first: Int
+        $skip: Int
+        $orderBy: KbAgentOrderBy
+        $orderDirection: OrderDirection
+      ) {
+        kbAgents(
+          where: $where
+          first: $first
+          skip: $skip
+          orderBy: $orderBy
+          orderDirection: $orderDirection
+        ) {
+          total
+          hasMore
+          agents { ${selection} }
+        }
+      }
+    `;
+
+    const data = await this.gqlRequest<{ kbAgents: KbAgentSearchResult }>(query, {
+      where: { chainId: cid, agentAccountOwnerAddress: eoa } as any,
+      first,
+      skip,
+      orderBy: orderByKb,
+      orderDirection,
+    });
+
+    const list = data?.kbAgents?.agents ?? [];
+    return {
+      agents: list.map((a) => this.mapKbAgentToAgentData(a)),
+      total: Number(data?.kbAgents?.total ?? list.length),
+      hasMore: Boolean(data?.kbAgents?.hasMore),
+    };
+  }
+
+  /**
    * Resolve a single agent by UAID (KB v2). UAID-only; no fallback to chainId/agentId.
    */
   async getAgentByUaid(uaid: string): Promise<AgentData | null> {
@@ -3962,6 +4041,204 @@ export class AIAgentDiscoveryClient {
    */
   getClient(): GraphQLClient {
     return this.client;
+  }
+
+  /**
+   * Get agents on a specific chain related to an EOA address.
+   *
+   * This is intended to cover BOTH:
+   * - (B) EOA controls/owns the agent account (ownerEOAAccount == eoa)
+   * - (C) agent account itself is the EOA (agentAccount.address == eoa and accountType indicates EOA)
+   *
+   * Primary path: calls KB v2 backend field `kbAgentsByEoa`.
+   * Fallback: if the backend does not expose `kbAgentsByEoa`, it merges:
+   * - `kbOwnedAgents(chainId, ownerAddress)` (B)
+   * - plus a best-effort scan of `kbAgents(where:{chainId})` and client-side filter for (C)
+   */
+  async getAgentsByEoa(
+    chainId: number,
+    eoaAddress: string,
+    options?: {
+      first?: number;
+      skip?: number;
+      orderBy?: 'agentId8004' | 'agentName' | 'uaid' | 'createdAtTime' | 'updatedAtTime' | 'trustLedgerTotalPoints';
+      orderDirection?: 'ASC' | 'DESC';
+      includeIdentityAndAccounts?: boolean;
+      /**
+       * Maximum number of agents to scan in fallback mode to find (C).
+       * Only used when kbAgentsByEoa is not available on the backend.
+       */
+      fallbackMaxScan?: number;
+    },
+  ): Promise<{ agents: AgentData[]; total: number; hasMore: boolean }> {
+    const cid = Number(chainId);
+    if (!Number.isFinite(cid) || cid <= 0) {
+      throw new Error('Invalid chainId. Must be a positive number.');
+    }
+
+    const eoa = String(eoaAddress ?? '').trim();
+    if (!/^0x[a-fA-F0-9]{40}$/.test(eoa)) {
+      throw new Error('Invalid EOA address. Must be a 0x-prefixed 20-byte hex address.');
+    }
+
+    const first = Math.max(1, Math.floor(options?.first ?? 100));
+    const skip = Math.max(0, Math.floor(options?.skip ?? 0));
+    const orderDirection: 'ASC' | 'DESC' =
+      (options?.orderDirection ?? 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    const orderBy = options?.orderBy ?? 'updatedAtTime';
+    const orderByKb = (await this.pickKbAgentOrderBy([orderBy, 'updatedAtTime', 'createdAtTime', 'uaid', 'agentName'])) ?? 'agentName';
+
+    const includeIdentityAndAccounts = options?.includeIdentityAndAccounts ?? true;
+    const selection = await this.getKbAgentSelection({ includeIdentityAndAccounts });
+
+    const query = `
+      query KbAgentsByEoa(
+        $chainId: Int!
+        $eoaAddress: String!
+        $first: Int
+        $skip: Int
+        $orderBy: KbAgentOrderBy
+        $orderDirection: OrderDirection
+      ) {
+        kbAgentsByEoa(
+          chainId: $chainId
+          eoaAddress: $eoaAddress
+          first: $first
+          skip: $skip
+          orderBy: $orderBy
+          orderDirection: $orderDirection
+        ) {
+          agents { ${selection} }
+          total
+          hasMore
+        }
+      }
+    `;
+
+    try {
+      const data = await this.gqlRequest<{ kbAgentsByEoa: KbAgentSearchResult }>(query, {
+        chainId: cid,
+        eoaAddress: eoa,
+        first,
+        skip,
+        orderBy: orderByKb,
+        orderDirection,
+      });
+
+      const list = data?.kbAgentsByEoa?.agents ?? [];
+      return {
+        agents: list.map((a) => this.mapKbAgentToAgentData(a)),
+        total: Number(data?.kbAgentsByEoa?.total ?? list.length),
+        hasMore: Boolean(data?.kbAgentsByEoa?.hasMore),
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const missingField =
+        msg.includes('Cannot query field') && (msg.includes('kbAgentsByEoa') || msg.includes('kbAgentsByEOA'));
+      if (!missingField) {
+        throw error;
+      }
+
+      // -----------------------
+      // Fallback mode (best-effort)
+      // -----------------------
+      const out: AgentData[] = [];
+      const seen = new Set<string>();
+
+      const pushUnique = (agents: AgentData[]) => {
+        for (const a of agents) {
+          const key = String(a.uaid || a.iri || '');
+          if (!key) continue;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(a);
+        }
+      };
+
+      // (B) Owned-by-EOA (chain-scoped)
+      const ownedQuery = `
+        query KbOwnedAgents(
+          $chainId: Int!
+          $ownerAddress: String!
+          $first: Int
+          $skip: Int
+          $orderBy: KbAgentOrderBy
+          $orderDirection: OrderDirection
+        ) {
+          kbOwnedAgents(
+            chainId: $chainId
+            ownerAddress: $ownerAddress
+            first: $first
+            skip: $skip
+            orderBy: $orderBy
+            orderDirection: $orderDirection
+          ) {
+            agents { ${selection} }
+            total
+            hasMore
+          }
+        }
+      `;
+      const ownedData = await this.gqlRequest<{ kbOwnedAgents: KbAgentSearchResult }>(ownedQuery, {
+        chainId: cid,
+        ownerAddress: eoa,
+        first,
+        skip,
+        orderBy: orderByKb,
+        orderDirection,
+      });
+      const ownedList = ownedData?.kbOwnedAgents?.agents ?? [];
+      pushUnique(ownedList.map((a) => this.mapKbAgentToAgentData(a)));
+
+      // (C) agentAccount == EOA (best-effort scan)
+      const maxScan = Math.max(100, Math.floor(options?.fallbackMaxScan ?? 1000));
+      let scanned = 0;
+      let pageSkip = 0;
+      const pageSize = Math.min(200, maxScan);
+      const scanOrderBy: 'agentId' | 'agentName' | 'createdAtTime' =
+        orderBy === 'agentName' || orderBy === 'createdAtTime' ? orderBy : 'createdAtTime';
+
+      while (scanned < maxScan) {
+        const page = await this.searchAgentsGraph({
+          where: { chainId: cid },
+          first: pageSize,
+          skip: pageSkip,
+          orderBy: scanOrderBy,
+          orderDirection,
+        });
+        const candidates = page?.agents ?? [];
+        if (!candidates.length) break;
+
+        const matching = candidates.filter((a) => {
+          const identities = (a as any)?.identities;
+          if (!Array.isArray(identities)) return false;
+          for (const id of identities) {
+            const agentAccount = (id as any)?.agentAccount;
+            if (!agentAccount || typeof agentAccount !== 'object') continue;
+            const addr = String((agentAccount as any).address ?? '').trim();
+            if (!addr) continue;
+            if (addr.toLowerCase() !== eoa.toLowerCase()) continue;
+            const t = String((agentAccount as any).accountType ?? '').toLowerCase();
+            // Accept obvious EOA markers; backend schemas vary.
+            if (!t || t.includes('eoa') || t.includes('externally')) return true;
+          }
+          return false;
+        });
+
+        pushUnique(matching);
+
+        scanned += candidates.length;
+        pageSkip += candidates.length;
+        if (!page.hasMore) break;
+      }
+
+      return {
+        agents: out.slice(0, first),
+        total: out.length,
+        hasMore: out.length > first,
+      };
+    }
   }
 
   /**

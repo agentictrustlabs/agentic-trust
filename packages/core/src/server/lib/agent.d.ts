@@ -7,7 +7,7 @@
  */
 import type { AgenticTrustClient } from '../singletons/agenticTrustClient';
 import type { A2AAgentCard as AgentCard, AgentSkill, AgentCapabilities } from '../models/a2aAgentCardInfo';
-import type { AgentData as DiscoveryAgentData, GiveFeedbackParams } from '@agentic-trust/8004-ext-sdk';
+import type { AgentData as DiscoveryAgentData, GiveFeedbackParams } from '@agentic-trust/agentic-trust-sdk';
 import type { AgentDetail, AgentIdentifier } from '../models/agentDetail';
 import type { PreparedTransaction } from '../../client/walletSigning';
 import type { SessionPackage } from '../../shared/sessionPackage';

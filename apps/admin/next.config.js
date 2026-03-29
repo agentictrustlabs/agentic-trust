@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@agentic-trust/core', '@agentic-trust/8004-ext-sdk', '@agentic-trust/8004-sdk'],
+  transpilePackages: ['@agentic-trust/core', '@agentic-trust/agentic-trust-sdk', '@agentic-trust/8004-sdk'],
   async rewrites() {
     return [
       // OWLAPI/Protégé dereferences `.../ontology/X#` as `.../ontology/X` (fragment not sent over HTTP).

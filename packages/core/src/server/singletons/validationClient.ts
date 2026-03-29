@@ -5,7 +5,7 @@
  * Initialized from environment variables and domain AccountProvider
  */
 
-import { AIAgentValidationClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentValidationClient } from '@agentic-trust/agentic-trust-sdk';
 import type { AccountProvider } from '@agentic-trust/8004-sdk';
 import { getChainEnvVar, requireChainEnvVar, DEFAULT_CHAIN_ID } from '../lib/chainConfig';
 import { DomainClient } from './domainClient';

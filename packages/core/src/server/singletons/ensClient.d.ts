@@ -4,7 +4,7 @@
  * Manages a singleton instance of AIAgentENSClient
  * Initialized from environment variables using AccountProvider
  */
-import { AIAgentENSClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentENSClient } from '@agentic-trust/agentic-trust-sdk';
 /**
  * Get or create the AIAgentENSClient singleton
  * Initializes from environment variables using AccountProvider from AdminApp, ClientApp, or ProviderApp

@@ -19,7 +19,7 @@ import {
   type Hex,
 } from 'viem';
 import { http, isAddressEqual } from 'viem';
-import { AIAgentIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 import {
   getChainById,
   getChainConfig,

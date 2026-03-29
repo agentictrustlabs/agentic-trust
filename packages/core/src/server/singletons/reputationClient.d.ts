@@ -4,7 +4,7 @@
  * Manages a singleton instance of AIAgentReputationClient
  * Initialized from session package or environment variables
  */
-import { AIAgentReputationClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentReputationClient } from '@agentic-trust/agentic-trust-sdk';
 /**
  * Get or create the AIAgentReputationClient singleton
  * Initializes from session package if available, otherwise uses environment variables

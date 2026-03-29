@@ -161,7 +161,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }, 100);
 
     // Listen for account changes
-    if (window.ethereum) {
+    const eth = (window as any)?.ethereum as
+      | {
+          on?: (event: string, handler: (...args: any[]) => void) => void;
+          removeListener?: (event: string, handler: (...args: any[]) => void) => void;
+        }
+      | undefined;
+    if (eth?.on) {
       const handleAccountsChanged = (accounts: string[]) => {
         if (accounts.length === 0) {
           setConnected(false);
@@ -172,13 +178,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       };
 
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      eth.on('accountsChanged', handleAccountsChanged);
 
       return () => {
         clearTimeout(timer);
-        if (window.ethereum) {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        }
+        eth.removeListener?.('accountsChanged', handleAccountsChanged);
       };
     }
 

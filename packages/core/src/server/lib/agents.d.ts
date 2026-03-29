@@ -2,7 +2,7 @@
  * Agents API for AgenticTrust Client
  */
 import type { AgenticTrustClient } from '../singletons/agenticTrustClient';
-import { type AgentData } from '@agentic-trust/8004-ext-sdk';
+import { type AgentData } from '@agentic-trust/agentic-trust-sdk';
 import { Agent } from './agent';
 import type { AgentDetail } from '../models/agentDetail';
 import type { Address } from 'viem';

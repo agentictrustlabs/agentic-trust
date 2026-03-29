@@ -22,7 +22,7 @@ import {
   requireChainEnvVar 
 } from '@agentic-trust/core/server';
 import { sendSponsoredUserOperation, waitForUserOperationReceipt } from '@agentic-trust/core';
-import IdentityRegistryAbi from '@agentic-trust/8004-ext-sdk/abis/IdentityRegistry.json';
+import IdentityRegistryAbi from '@agentic-trust/agentic-trust-sdk/abis/IdentityRegistry.json';
 import {
   formatEvmV1,
   eip712Hash,

@@ -1,4 +1,4 @@
-import { buildDid8004, parseDid8004 as baseParseDid8004, resolveDid8004, } from '@agentic-trust/8004-ext-sdk';
+import { buildDid8004, parseDid8004 as baseParseDid8004, resolveDid8004, } from '@agentic-trust/agentic-trust-sdk';
 function normalizeDidInput(value) {
     if (!value) {
         return value;

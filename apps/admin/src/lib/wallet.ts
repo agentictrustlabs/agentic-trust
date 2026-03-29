@@ -7,11 +7,26 @@ import { createWalletClient, custom, type WalletClient, type Address } from 'vie
 import { sepolia } from 'viem/chains';
 import { ethers } from 'ethers';
 
+type Eip1193Provider = {
+  request: (args: { method: string; params?: any }) => Promise<any>;
+  on?: (event: string, handler: (...args: any[]) => void) => void;
+  removeListener?: (event: string, handler: (...args: any[]) => void) => void;
+  isMetaMask?: boolean;
+};
+
 // Wallet client instance
 let walletClient: WalletClient | null = null;
 
 // Track pending connection request to prevent duplicate requests
 let pendingConnectionRequest: Promise<Address> | null = null;
+
+function getEip1193Provider(): Eip1193Provider {
+  const eth = (window as any)?.ethereum as Eip1193Provider | undefined;
+  if (!eth || typeof eth.request !== 'function') {
+    throw new Error('No Ethereum wallet found. Please install MetaMask or another Web3 wallet.');
+  }
+  return eth;
+}
 
 /**
  * Connect to MetaMask or other EIP-1193 wallet
@@ -21,13 +36,7 @@ export async function connectWallet(): Promise<Address> {
     throw new Error('Wallet connection can only be used on the client-side');
   }
 
-  // Check if ethereum provider is available
-  if (!window.ethereum) {
-    throw new Error('No Ethereum wallet found. Please install MetaMask or another Web3 wallet.');
-  }
-
-  // Store reference to avoid TypeScript issues
-  const ethereumProvider = window.ethereum;
+  const ethereumProvider = getEip1193Provider();
 
   // If there's already a pending connection request, wait for it (with timeout)
   if (pendingConnectionRequest) {
@@ -54,7 +63,7 @@ export async function connectWallet(): Promise<Address> {
           walletClient = createWalletClient({
             account: address,
             chain: sepolia,
-            transport: custom(ethereumProvider),
+            transport: custom(ethereumProvider as any),
           });
           return address;
         }
@@ -80,7 +89,7 @@ export async function connectWallet(): Promise<Address> {
       walletClient = createWalletClient({
         account: address,
         chain: sepolia,
-        transport: custom(ethereumProvider),
+        transport: custom(ethereumProvider as any),
       });
       return address;
     }
@@ -105,7 +114,7 @@ export async function connectWallet(): Promise<Address> {
       walletClient = createWalletClient({
         account: address,
         chain: sepolia,
-        transport: custom(ethereumProvider),
+        transport: custom(ethereumProvider as any),
       });
 
       return address;
@@ -129,7 +138,7 @@ export async function connectWallet(): Promise<Address> {
               walletClient = createWalletClient({
                 account: address,
                 chain: sepolia,
-                transport: custom(ethereumProvider),
+                transport: custom(ethereumProvider as any),
               });
               return address;
             }
@@ -166,12 +175,12 @@ export async function connectWallet(): Promise<Address> {
  * Get the connected wallet address
  */
 export async function getWalletAddress(): Promise<Address | null> {
-  if (typeof window === 'undefined' || !window.ethereum) {
-    return null;
-  }
+  if (typeof window === 'undefined') return null;
+  const eth = (window as any)?.ethereum as Eip1193Provider | undefined;
+  if (!eth || typeof eth.request !== 'function') return null;
 
   try {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    const accounts = await eth.request({ method: 'eth_accounts' });
     if (accounts && accounts.length > 0) {
       return accounts[0] as Address;
     }
@@ -189,14 +198,16 @@ export async function disconnectWallet(): Promise<void> {
   walletClient = null;
   
   // Attempt to revoke permissions so MetaMask shows as disconnected
-  if (typeof window !== 'undefined' && window.ethereum?.request) {
+  if (typeof window !== 'undefined') {
     try {
-      await window.ethereum.request({
+      const eth = (window as any)?.ethereum as Eip1193Provider | undefined;
+      if (!eth || typeof eth.request !== 'function') return;
+      await eth.request({
         method: 'wallet_revokePermissions',
         params: [{ eth_accounts: {} }],
       });
       // Verify revocation by triggering accounts check
-      await window.ethereum.request({ method: 'eth_accounts' });
+      await eth.request({ method: 'eth_accounts' });
     } catch (error) {
       console.warn('Unable to revoke wallet permissions (disconnect). User may need to disconnect manually.', error);
     }
@@ -229,9 +240,7 @@ export function getSepoliaProvider(): ethers.Provider {
     process.env.NEXT_PUBLIC_AGENTIC_TRUST_RPC_URL;
 
   if (!rpcUrl) {
-    throw new Error(
-      'RPC URL not found. Set AGENTIC_TRUST_RPC_URL_SEPOLIA or AGENTIC_TRUST_RPC_URL'
-    );
+    throw new Error('RPC URL not found. Set AGENTIC_TRUST_RPC_URL_SEPOLIA or AGENTIC_TRUST_RPC_URL');
   }
 
   return new ethers.JsonRpcProvider(rpcUrl);
@@ -244,25 +253,10 @@ export function getAdminWallet(): ethers.Wallet {
   const key = process.env.AGENTIC_TRUST_ADMIN_PRIVATE_KEY || process.env.ADMIN_PRIVATE_KEY;
 
   if (!key) {
-    throw new Error(
-      'AGENTIC_TRUST_ADMIN_PRIVATE_KEY or ADMIN_PRIVATE_KEY environment variable is required'
-    );
+    throw new Error('AGENTIC_TRUST_ADMIN_PRIVATE_KEY or ADMIN_PRIVATE_KEY environment variable is required');
   }
 
   // Normalize to ensure 0x prefix
   const normalizedKey = key.startsWith('0x') ? key : `0x${key}`;
   return new ethers.Wallet(normalizedKey);
 }
-
-// Extend Window interface for ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: any[] }) => Promise<any>;
-      on: (event: string, handler: (...args: any[]) => void) => void;
-      removeListener: (event: string, handler: (...args: any[]) => void) => void;
-      isMetaMask?: boolean;
-    };
-  }
-}
-

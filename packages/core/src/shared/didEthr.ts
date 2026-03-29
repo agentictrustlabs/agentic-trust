@@ -3,7 +3,7 @@ export {
   parseEthrDid,
   type ParsedEthrDid,
   type BuildEthrDidOptions,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 
 // Preferred Did-then-method aliases
 export {
@@ -11,6 +11,6 @@ export {
   parseEthrDid as parseDidEthr,
   type ParsedEthrDid as ParsedDidEthr,
   type BuildEthrDidOptions as BuildDidEthrOptions,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 
 

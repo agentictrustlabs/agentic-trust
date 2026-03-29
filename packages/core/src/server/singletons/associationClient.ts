@@ -5,7 +5,7 @@
  * Initialized from environment variables and domain AccountProvider
  */
 
-import { AIAgentAssociationClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentAssociationClient } from '@agentic-trust/agentic-trust-sdk';
 import type { AccountProvider } from '@agentic-trust/8004-sdk';
 import { ethers } from 'ethers';
 import { getChainEnvVar, requireChainEnvVar, DEFAULT_CHAIN_ID } from '../lib/chainConfig';

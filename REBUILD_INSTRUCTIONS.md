@@ -17,7 +17,7 @@ pnpm turbo run build --force
 ### 2. Rebuild Affected Packages
 ```bash
 # Rebuild the SDK package (contains AIAgentDiscoveryClient)
-pnpm --filter @agentic-trust/erc8004-agentic-trust-sdk run build
+pnpm --filter @agentic-trust/agentic-trust-sdk run build
 
 # Rebuild core package (uses the SDK)
 pnpm --filter @agentic-trust/core run build
@@ -53,6 +53,6 @@ pnpm run dev
 - **Next.js cache**: Delete `.next` folder in `apps/admin` if you see stale behavior
 
 ## Files Changed
-- `packages/erc8004-agentic-trust-sdk/AIAgentDiscoveryClient.ts` - Updated metadata query
+- `packages/agentic-trust-sdk/AIAgentDiscoveryClient.ts` - Updated metadata query
 - `packages/core/src/server/lib/agent.ts` - Updated to use `getAllAgentMetadata`
 - `apps/admin/src/app/admin-tools/page.tsx` - Updated skill display and sync logic

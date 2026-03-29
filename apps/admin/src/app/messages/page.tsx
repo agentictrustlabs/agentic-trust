@@ -628,6 +628,7 @@ export default function MessagesPage() {
     const uaid = typeof selectedFolderAgent?.uaid === 'string' ? String(selectedFolderAgent.uaid) : '';
     return uaid.startsWith('uaid:') ? uaid : null;
   }, [selectedFolderAgent]);
+  const selectedFromAgentDid = selectedFromAgentUaid;
 
   const isInboxMessage = useCallback(
     (m: Message) => {
@@ -1147,6 +1148,7 @@ export default function MessagesPage() {
       if (!currentAgentUaid.startsWith('uaid:')) {
         throw new Error('Current agent UAID is missing or invalid');
       }
+      const currentAgentDid = currentAgentUaid;
       const agentResponse = await fetch(`/api/agents/${encodeURIComponent(currentAgentUaid)}`);
       if (!agentResponse.ok) {
         throw new Error('Failed to fetch current agent details');

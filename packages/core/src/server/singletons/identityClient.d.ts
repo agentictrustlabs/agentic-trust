@@ -4,7 +4,7 @@
  * Manages a singleton instance of AIAgentIdentityClient
  * Initialized from environment variables using AccountProvider
  */
-import { AIAgentIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 /**
  * Get or create the AIAgentIdentityClient singleton
  * Initializes from environment variables using AccountProvider

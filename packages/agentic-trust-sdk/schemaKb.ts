@@ -65,6 +65,8 @@ export const graphQLSchemaStringKb = `
 
   input KbAgentWhereInput {
     chainId: Int
+    # EOA that owns/controls the agent account (KB-specific extension).
+    agentAccountOwnerAddress: String
     agentIdentifierMatch: String
     did8004: String
     uaid: String
@@ -553,6 +555,17 @@ export const graphQLSchemaStringKb = `
     # Like kbOwnedAgents, but searches across all subgraph graphs (no chainId required).
     kbOwnedAgentsAllChains(
       ownerAddress: String!
+      first: Int
+      skip: Int
+      orderBy: KbAgentOrderBy
+      orderDirection: OrderDirection
+    ): KbAgentSearchResult!
+
+    # Convenience query: agents on a chain related to an EOA via either:
+    # (B) EOA controls/owns the agent account, or (C) agent account is itself the EOA.
+    kbAgentsByEoa(
+      chainId: Int!
+      eoaAddress: String!
       first: Int
       skip: Int
       orderBy: KbAgentOrderBy

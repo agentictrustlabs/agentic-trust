@@ -221,7 +221,7 @@ export async function GET(request: Request) {
 
     // Build a minimal associations client pointed at the admin-configured proxy.
     const associationsClient = await (async () => {
-      const { AIAgentAssociationClient } = await import("@agentic-trust/8004-ext-sdk");
+      const { AIAgentAssociationClient } = await import("@agentic-trust/agentic-trust-sdk");
       const { encodeFunctionData } = await import("viem");
       const accountProvider = {
         chain: () => ({ id: chainId, rpcUrl }),

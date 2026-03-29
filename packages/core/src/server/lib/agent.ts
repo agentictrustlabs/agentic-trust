@@ -13,8 +13,8 @@ import type {
   AgentSkill,
   AgentCapabilities,
 } from '../models/a2aAgentCardInfo';
-import type { AgentData as DiscoveryAgentData, GiveFeedbackParams } from '@agentic-trust/8004-ext-sdk';
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import type { AgentData as DiscoveryAgentData, GiveFeedbackParams } from '@agentic-trust/agentic-trust-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 import { getProviderApp } from '../userApps/providerApp';
 import { getReputationRegistryClient } from '../singletons/reputationClient';
 import { getIPFSStorage } from './ipfs';

@@ -103,6 +103,7 @@ export async function POST(req: Request) {
     if (!parsed) {
       return NextResponse.json({ ok: false, error: 'Invalid did8004' }, { status: 400 });
     }
+    const parsedDid = parsed as { chainId: number };
 
     // If SAR is provided, prepare the tx directly from it (no recomputation).
     if (body.sar) {
@@ -164,16 +165,16 @@ export async function POST(req: Request) {
 
       // Create associations client with admin's proxy address
       const associationsClient = await (async () => {
-        const { AIAgentAssociationClient } = await import('@agentic-trust/8004-ext-sdk');
+        const { AIAgentAssociationClient } = await import('@agentic-trust/agentic-trust-sdk');
         const { getChainRpcUrl } = await import('@agentic-trust/core/server');
         const { encodeFunctionData } = await import('viem');
 
-        const rpcUrl = getChainRpcUrl(parsed.chainId);
-        if (!rpcUrl) throw new Error(`No RPC URL for chain ${parsed.chainId}`);
+        const rpcUrl = getChainRpcUrl(parsedDid.chainId);
+        if (!rpcUrl) throw new Error(`No RPC URL for chain ${parsedDid.chainId}`);
 
         // Create a minimal AccountProvider for read-only operations
         const accountProvider = {
-          chain: () => ({ id: parsed.chainId, rpcUrl }),
+          chain: () => ({ id: parsedDid.chainId, rpcUrl }),
           encodeFunctionData: async (params: any) => {
             return encodeFunctionData(params) as any;
           },
@@ -208,14 +209,14 @@ export async function POST(req: Request) {
           success: true,
           operation: 'update',
           mode: 'eoa',
-          chainId: parsed.chainId,
+          chainId: parsedDid.chainId,
           calls: [],
           bundlerUrl: undefined,
           transaction: {
             to: txRequest.to,
             data: txRequest.data,
             value: txRequest.value ?? BigInt(0),
-            chainId: parsed.chainId,
+            chainId: parsedDid.chainId,
           },
           metadata: { kind: 'erc8092.storeAssociation' },
         }));
@@ -224,7 +225,7 @@ export async function POST(req: Request) {
         success: true,
         operation: 'update',
         mode: 'smartAccount',
-        chainId: parsed.chainId,
+        chainId: parsedDid.chainId,
         bundlerUrl: undefined,
         calls: [
           {
@@ -256,9 +257,12 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(plan);
-  } catch (e: unknown) {
+  } catch (e: any) {
     const { NextResponse } = await import('next/server');
-    const msg = e instanceof Error ? e.message : 'Unknown error';
+    let msg = 'Unknown error';
+    if (e && typeof e === 'object' && typeof e.message === 'string' && e.message.trim()) msg = e.message;
+    else if (typeof e === 'string' && e.trim()) msg = e;
+    else msg = String(e);
     console.error('[API /associate] prepare-only error:', e);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }

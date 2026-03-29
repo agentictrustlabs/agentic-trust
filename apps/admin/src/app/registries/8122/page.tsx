@@ -17,6 +17,7 @@ import {
   parseEther,
   toHex,
 } from 'viem';
+import type { Chain } from 'viem';
 import { mainnet, sepolia, baseSepolia, optimismSepolia, linea, lineaSepolia } from 'viem/chains';
 
 import { agentRegistryAbi, agentRegistrarAbi, agentRegistryFactoryAbi } from '@agentic-trust/8122-sdk';
@@ -32,7 +33,7 @@ const SUPPORTED_CHAINS = [
   { id: 59141, label: 'Linea Sepolia' },
 ] as const;
 
-const CHAIN_BY_ID: Record<number, any> = {
+const CHAIN_BY_ID: Record<number, Chain> = {
   1: mainnet,
   11155111: sepolia,
   84532: baseSepolia,
@@ -139,7 +140,7 @@ export default function Registries8122AdminPage() {
     [chainId],
   );
 
-  const chain = CHAIN_BY_ID[chainId];
+  const chain: Chain | null = CHAIN_BY_ID[chainId] ?? null;
 
   const refresh = useCallback(async () => {
     setLoadingList(true);
@@ -264,7 +265,7 @@ export default function Registries8122AdminPage() {
     setCreating(true);
     try {
       await ensureEip1193Chain(eip1193Provider, chainId);
-      const walletClient = createWalletClient({ chain, transport: custom(eip1193Provider) });
+      const walletClient = createWalletClient({ account: admin, chain, transport: custom(eip1193Provider) });
       const publicClient = createPublicClient({ chain, transport: custom(eip1193Provider) });
 
       const tx = await walletClient.writeContract({
@@ -273,6 +274,7 @@ export default function Registries8122AdminPage() {
         functionName: 'deploy',
         args: [admin, mp, ms],
         account: admin,
+        chain,
       });
       setCreateTxHash(tx);
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });

@@ -6,7 +6,7 @@
  */
 
 
-import { AIAgentReputationClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentReputationClient } from '@agentic-trust/agentic-trust-sdk';
 import { type AccountProvider } from '@agentic-trust/8004-sdk';
 import { getChainEnvVar, requireChainEnvVar, DEFAULT_CHAIN_ID } from '../lib/chainConfig';
 import { DomainClient } from './domainClient';

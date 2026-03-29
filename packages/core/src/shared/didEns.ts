@@ -4,7 +4,7 @@ export {
   parseEnsDid,
   type ParsedEnsDid,
   type BuildEnsDidOptions,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 
 // Preferred Did-then-method aliases
 export {
@@ -13,6 +13,6 @@ export {
   parseEnsDid as parseDidEns,
   type ParsedEnsDid as ParsedDidEns,
   type BuildEnsDidOptions as BuildDidEnsOptions,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 
 

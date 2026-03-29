@@ -26,7 +26,7 @@ import { Agent, loadAgentDetail } from '../lib/agent';
 import type { AgentDetail } from '../models/agentDetail';
 import { createFeedbackAuth, createFeedbackAuthWithDelegation, type CreateFeedbackAuthWithDelegationResult } from '../lib/agentFeedback';
 import type { RequestAuthParams } from '../lib/agentFeedback';
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 
 import type { SessionPackage } from '../../shared/sessionPackage';
 import type { Address } from 'viem';
@@ -1782,7 +1782,7 @@ export class AgenticTrustClient {
 
     // Create the reputation client using the AccountProviders
     // The AccountProviders can be from AdminApp (wallet provider), ClientApp, or created from privateKey
-    const { AIAgentReputationClient } = await import('@agentic-trust/8004-ext-sdk');
+    const { AIAgentReputationClient } = await import('@agentic-trust/agentic-trust-sdk');
     
     const reputationClient = await AIAgentReputationClient.create(
       accountProvider,

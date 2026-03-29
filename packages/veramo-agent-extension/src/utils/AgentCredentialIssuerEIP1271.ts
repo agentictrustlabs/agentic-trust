@@ -51,7 +51,7 @@ const chain = sepolia
 
 import { getEthTypesFromInputDoc } from 'eip-712-types-generation'
 import { getRegistryAgent } from './IdentityRegistry.js'
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 
 // Extracts the numeric agentId from a verificationMethod object.
 // Accepts fields like:

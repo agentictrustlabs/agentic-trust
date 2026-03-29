@@ -4,7 +4,7 @@
  * Manages a singleton instance of AssociationsStoreClient
  * Initialized from environment variables and domain AccountProvider
  */
-import { AIAgentAssociationClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentAssociationClient } from '@agentic-trust/agentic-trust-sdk';
 import { ethers } from 'ethers';
 import { requireChainEnvVar, DEFAULT_CHAIN_ID } from '../lib/chainConfig';
 import { DomainClient } from './domainClient';

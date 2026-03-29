@@ -1,4 +1,4 @@
-# ERC-8004 Agentic Trust SDK
+# Agentic Trust SDK
 
 A TypeScript SDK for managing AI agents with ENS integration, identity management, and reputation systems on Ethereum L1 and L2. This SDK extends the core ERC-8004 SDK with agent-specific functionality.
 
@@ -14,17 +14,17 @@ A TypeScript SDK for managing AI agents with ENS integration, identity managemen
 ## Installation
 
 ```bash
-npm install @agentic-trust/8004-ext-sdk
+npm install @agentic-trust/agentic-trust-sdk
 # or
-yarn add @agentic-trust/8004-ext-sdk
+yarn add @agentic-trust/agentic-trust-sdk
 # or
-pnpm add @agentic-trust/8004-ext-sdk
+pnpm add @agentic-trust/agentic-trust-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { AIAgentENSClient, AIAgentIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentENSClient, AIAgentIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 import { sepolia } from 'viem/chains';
 
 // Create an ENS client for agent management
@@ -55,7 +55,7 @@ const { agentId, account } = await ensClient.getAgentIdentityByName('alice.agent
 Handles ENS operations for AI agents:
 
 ```typescript
-import { AIAgentENSClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentENSClient } from '@agentic-trust/agentic-trust-sdk';
 
 const ensClient = new AIAgentENSClient(chain, rpcUrl, adapter, ensRegistry, ensResolver, identityRegistry);
 
@@ -74,7 +74,7 @@ const { agentId, ensName } = await ensClient.getAgentIdentityByAccount('0x...');
 Manages agent identity and metadata:
 
 ```typescript
-import { AIAgentIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 
 const identityClient = new AIAgentIdentityClient(chainId, rpcUrl, identityRegistry);
 
@@ -93,7 +93,7 @@ const eoa = await identityClient.getAgentEoaByAgentAccount(agentAccount);
 Handles reputation and feedback:
 
 ```typescript
-import { AIAgentReputationClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentReputationClient } from '@agentic-trust/agentic-trust-sdk';
 
 const reputationClient = new AIAgentReputationClient(chain, orgAdapter, agentAdapter, reputationRegistry);
 
@@ -114,7 +114,7 @@ const score = await reputationClient.getReputationScore('0x...');
 L2-specific ENS operations:
 
 ```typescript
-import { AIAgentL2ENSDurenClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentL2ENSDurenClient } from '@agentic-trust/agentic-trust-sdk';
 
 const l2Client = new AIAgentL2ENSDurenClient(chain, rpcUrl, adapter, ensRegistry, ensResolver, identityRegistry);
 
@@ -127,7 +127,7 @@ const account = await l2Client.getAgentAccountByName('alice.agent.base');
 Organization management utilities:
 
 ```typescript
-import { OrgIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { OrgIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 
 const orgClient = new OrgIdentityClient(adapter, { ensRegistry: '0x...', rpcUrl: 'https://...' });
 

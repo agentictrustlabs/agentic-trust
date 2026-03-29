@@ -3,7 +3,7 @@
  *
  * Core SDK for agentic trust systems
  */
-export { AIAgentENSClient, AIAgentL2ENSDurenClient, AIAgentL2ENSNamespaceClient, AIAgentIdentityClient, AIAgentReputationClient, OrgIdentityClient, type GiveFeedbackParams, } from '@agentic-trust/8004-ext-sdk';
+export { AIAgentENSClient, AIAgentL2ENSDurenClient, AIAgentL2ENSNamespaceClient, AIAgentIdentityClient, AIAgentReputationClient, OrgIdentityClient, type GiveFeedbackParams, } from '@agentic-trust/agentic-trust-sdk';
 export { ViemAccountProvider, type AccountProvider, type ChainConfig, type ReadClient, type Signer, type TxSender, type TxRequest, type GasPolicy, type TxSendResult, type PreparedCall, } from '@agentic-trust/8004-sdk';
 export type { ValidationStatus, } from '@agentic-trust/8004-sdk';
 export { buildDid8004, parseDid8004, resolveDid8004, type BuildDid8004Options, type ParsedDid8004, } from './shared/did8004';

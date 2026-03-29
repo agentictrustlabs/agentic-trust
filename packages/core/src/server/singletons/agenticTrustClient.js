@@ -17,7 +17,7 @@ import { createVeramoAgentForClient } from '../lib/veramoFactory';
 import { getChainEnvVar, DEFAULT_CHAIN_ID } from '../lib/chainConfig';
 import { Agent, loadAgentDetail } from '../lib/agent';
 import { createFeedbackAuth, createFeedbackAuthWithDelegation } from '../lib/agentFeedback';
-import { parseDid8004 } from '@agentic-trust/8004-ext-sdk';
+import { parseDid8004 } from '@agentic-trust/agentic-trust-sdk';
 const DEFAULT_DISCOVERY_URL = 'https://8004-agent.io';
 const DEFAULT_DISCOVERY_API_KEY = '9073051bb4bb81de87567794f24caf78f77d7985f79bc1cf6f79c33ce2cafdc3';
 
@@ -1103,7 +1103,7 @@ export class AgenticTrustClient {
         }
         // Create the reputation client using the AccountProviders
         // The AccountProviders can be from AdminApp (wallet provider), ClientApp, or created from privateKey
-        const { AIAgentReputationClient } = await import('@agentic-trust/8004-ext-sdk');
+        const { AIAgentReputationClient } = await import('@agentic-trust/agentic-trust-sdk');
         const reputationClient = await AIAgentReputationClient.create(accountProvider, identityRegistry, reputationRegistry, (ensRegistry || '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e') // Default ENS registry on Sepolia
         );
         // Store the reputation client in the singleton

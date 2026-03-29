@@ -5,7 +5,7 @@
  * Initialized from environment variables using AccountProvider
  */
 
-import { AIAgentIdentityClient } from '@agentic-trust/8004-ext-sdk';
+import { AIAgentIdentityClient } from '@agentic-trust/agentic-trust-sdk';
 import { ViemAccountProvider } from '@agentic-trust/8004-sdk';
 import { requireChainEnvVar, DEFAULT_CHAIN_ID } from '../lib/chainConfig';
 import { DomainClient } from './domainClient';

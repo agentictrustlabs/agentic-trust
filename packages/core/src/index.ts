@@ -14,7 +14,7 @@ export {
   AIAgentReputationClient,
   OrgIdentityClient,
   type GiveFeedbackParams,
-} from '@agentic-trust/8004-ext-sdk';
+} from '@agentic-trust/agentic-trust-sdk';
 
 // Export AccountProvider types from erc8004-sdk for convenience
 export {

@@ -20,7 +20,7 @@ const getIdentityRegistryAbi = async () => {
     }
     try {
         // Dynamic import to avoid bundling JSON in client-side code if this module is tree-shaken improperly
-        const mod = await import('@agentic-trust/8004-ext-sdk/abis/IdentityRegistry.json');
+        const mod = await import('@agentic-trust/agentic-trust-sdk/abis/IdentityRegistry.json');
         abiCache = mod.default;
         return abiCache;
     }
