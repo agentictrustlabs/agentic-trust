@@ -207,7 +207,7 @@ This supports:
 
 ---
 
-## 11. Protocol-Centric and Composable Architecture (Implemented Today)
+## 11. Protocol-Centric and Composable Architecture
 
 > **This architecture is protocol-centric and composable by design.**
 
