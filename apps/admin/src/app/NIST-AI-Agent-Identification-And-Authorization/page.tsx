@@ -7,7 +7,19 @@ import remarkGfm from 'remark-gfm';
 import rehypeSlug from 'rehype-slug';
 import rehypeAutolinkHeadings from 'rehype-autolink-headings';
 
+import { Header } from '@/components/Header';
+import { useAuth } from '@/components/AuthProvider';
+
 export default function NistAiAgentIdentificationAndAuthorizationAliasPage() {
+  const {
+    isConnected,
+    privateKeyMode,
+    loading,
+    walletAddress,
+    openLoginModal,
+    handleDisconnect,
+  } = useAuth();
+
   const [markdown, setMarkdown] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loadingDoc, setLoadingDoc] = useState(true);
@@ -39,35 +51,65 @@ export default function NistAiAgentIdentificationAndAuthorizationAliasPage() {
 
   if (error) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="error">{error}</Alert>
+      <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+        <Header
+          displayAddress={walletAddress ?? null}
+          privateKeyMode={privateKeyMode}
+          isConnected={isConnected}
+          onConnect={openLoginModal}
+          onDisconnect={handleDisconnect}
+          disableConnect={loading}
+        />
+        <Box sx={{ p: 2 }}>
+          <Alert severity="error">{error}</Alert>
+        </Box>
       </Box>
     );
   }
 
   if (loadingDoc) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Alert severity="info">Loading…</Alert>
+      <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+        <Header
+          displayAddress={walletAddress ?? null}
+          privateKeyMode={privateKeyMode}
+          isConnected={isConnected}
+          onConnect={openLoginModal}
+          onDisconnect={handleDisconnect}
+          disableConnect={loading}
+        />
+        <Box sx={{ p: 2 }}>
+          <Alert severity="info">Loading…</Alert>
+        </Box>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, bgcolor: 'background.default', minHeight: '100vh' }}>
-      <Box className="markdown-body">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[
-            rehypeSlug,
-            [
-              rehypeAutolinkHeadings,
-              { behavior: 'wrap', properties: { style: 'text-decoration:none; color: inherit;' } },
-            ],
-          ]}
-        >
-          {markdown}
-        </ReactMarkdown>
+    <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+      <Header
+        displayAddress={walletAddress ?? null}
+        privateKeyMode={privateKeyMode}
+        isConnected={isConnected}
+        onConnect={openLoginModal}
+        onDisconnect={handleDisconnect}
+        disableConnect={loading}
+      />
+      <Box sx={{ p: { xs: 2, md: 3 } }}>
+        <Box className="markdown-body">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[
+              rehypeSlug,
+              [
+                rehypeAutolinkHeadings,
+                { behavior: 'wrap', properties: { style: 'text-decoration:none; color: inherit;' } },
+              ],
+            ]}
+          >
+            {markdown}
+          </ReactMarkdown>
+        </Box>
       </Box>
     </Box>
   );
