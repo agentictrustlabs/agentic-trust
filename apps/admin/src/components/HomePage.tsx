@@ -247,6 +247,7 @@ export function HomePage({
   const primaryHeroCta = 'Explore Live Agents →';
   const secondaryHeroCta = 'See how the stack works ↓';
   const explorerCta = 'Agent Explorer →';
+  const nistCta = 'Read the NIST submission →';
 
   const stackRef = useRef<HTMLDivElement | null>(null);
   const scrollToStack = useCallback(() => {
@@ -293,18 +294,19 @@ export function HomePage({
                   lineHeight: 1.1,
                 }}
               >
-                Smart Agents need more than execution.
+                Smart agents need more than execution.
               </Typography>
               <Typography
                 variant="h4"
                 sx={{ mt: 1.5, fontWeight: 800, fontSize: { xs: '1.55rem', md: '2.1rem' }, lineHeight: 1.15 }}
               >
-                They need identity, trust, and context.
+                They need identity, authority, context, and trust.
               </Typography>
 
               <Typography variant="h6" sx={{ mt: 2.5, color: 'text.secondary', maxWidth: 980, mx: 'auto' }}>
-                AgenticTrust is the coordination layer that lets autonomous agents execute actions, prove identity,
-                establish trust, and build shared context — all verifiable, composable, and discoverable.
+                AgenticTrust helps answer the harder question: <strong>who or what is acting</strong>,{' '}
+                <strong>under whose authority</strong>, <strong>in what context</strong>, and{' '}
+                <strong>how that action is trusted and verified</strong>.
               </Typography>
 
               <Stack
@@ -345,6 +347,22 @@ export function HomePage({
                   }}
                 >
                   {secondaryHeroCta}
+                </Button>
+                <Button
+                  variant="text"
+                  size="large"
+                  component="a"
+                  href="/nist"
+                  sx={{
+                    fontSize: '1.02rem',
+                    fontWeight: 900,
+                    py: 2,
+                    px: 2.5,
+                    borderRadius: 3,
+                    textTransform: 'none',
+                  }}
+                >
+                  {nistCta}
                 </Button>
               </Stack>
 
@@ -590,6 +608,170 @@ export function HomePage({
                     <Typography variant="body1">Agents must interoperate across orgs and chains</Typography>
                   </li>
                 </Box>
+              </CardContent>
+            </Card>
+
+            {/* NIST-aligned principles */}
+            <Card
+              variant="outlined"
+              sx={{
+                borderRadius: 4,
+                borderColor: palette.border,
+                backgroundColor: 'background.paper',
+              }}
+            >
+              <CardContent>
+                <Typography variant="h4" fontWeight={900} gutterBottom>
+                  NIST-aligned principles
+                </Typography>
+                <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 980 }}>
+                  This homepage and the Agent Explorer are built to reflect a specific framing: agent identity is defined in
+                  relation to action, authority, context, evidence over time, and relational trust — and the result must be
+                  auditable.
+                </Typography>
+
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems="stretch"
+                  sx={{ mt: 3 }}
+                  useFlexGap
+                  flexWrap="wrap"
+                >
+                  <Card variant="outlined" sx={{ flex: 1, minWidth: { xs: '100%', md: 280 }, borderRadius: 3, borderColor: palette.border }}>
+                    <CardContent>
+                      <Typography variant="h6" fontWeight={900} gutterBottom>
+                        1) Identity is about action
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Not “who is the user?”, but “who/what is acting, under whose authority, in what context, and how is it
+                        verified?”
+                      </Typography>
+                      <MuiLink href="/nist#problem-reframing" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                        Read more →
+                      </MuiLink>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined" sx={{ flex: 1, minWidth: { xs: '100%', md: 280 }, borderRadius: 3, borderColor: palette.border }}>
+                    <CardContent>
+                      <Typography variant="h6" fontWeight={900} gutterBottom>
+                        2) Agent is the root concept
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Humans, orgs, and AI are all agents. A unified model keeps delegation and accountability coherent.
+                      </Typography>
+                      <MuiLink href="/nist#agent-root" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                        Read more →
+                      </MuiLink>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined" sx={{ flex: 1, minWidth: { xs: '100%', md: 280 }, borderRadius: 3, borderColor: palette.border }}>
+                    <CardContent>
+                      <Typography variant="h6" fontWeight={900} gutterBottom>
+                        3) Identity needs an anchor
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        A persistent, portable identifier anchors an agent across systems and contexts (UAID / DID patterns).
+                      </Typography>
+                      <MuiLink href="/nist#identity-anchor" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                        Read more →
+                      </MuiLink>
+                    </CardContent>
+                  </Card>
+                </Stack>
+
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems="stretch"
+                  sx={{ mt: 2 }}
+                  useFlexGap
+                  flexWrap="wrap"
+                >
+                  <Card variant="outlined" sx={{ flex: 1, minWidth: { xs: '100%', md: 280 }, borderRadius: 3, borderColor: palette.border }}>
+                    <CardContent>
+                      <Typography variant="h6" fontWeight={900} gutterBottom>
+                        4) Identity is contextual
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        The same anchored agent projects different facets across domains without fragmenting accountability.
+                      </Typography>
+                      <MuiLink href="/nist#contextual-identity" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                        Read more →
+                      </MuiLink>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined" sx={{ flex: 1, minWidth: { xs: '100%', md: 280 }, borderRadius: 3, borderColor: palette.border }}>
+                    <CardContent>
+                      <Typography variant="h6" fontWeight={900} gutterBottom>
+                        5) Trust needs time & evidence
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Trust evolves from signed actions and evidence over time — not static identity records.
+                      </Typography>
+                      <MuiLink href="/nist#time-and-evidence" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                        Read more →
+                      </MuiLink>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined" sx={{ flex: 1, minWidth: { xs: '100%', md: 280 }, borderRadius: 3, borderColor: palette.border }}>
+                    <CardContent>
+                      <Typography variant="h6" fontWeight={900} gutterBottom>
+                        6) Trust is relational
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Directional, context-specific, evidence-based trust relationships are first-class.
+                      </Typography>
+                      <MuiLink href="/nist#relational-trust" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                        Read more →
+                      </MuiLink>
+                    </CardContent>
+                  </Card>
+                </Stack>
+
+                <Card
+                  variant="outlined"
+                  sx={{
+                    mt: 2,
+                    borderRadius: 3,
+                    borderColor: palette.border,
+                    backgroundColor: palette.surfaceMuted,
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="h6" fontWeight={900} gutterBottom>
+                      7) The Agent Trust Graph is required
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 980 }}>
+                      Multi-agent systems need a graph model of identity, relationships, delegation, assertions, and history.
+                      Agent Explorer is a read-only window into that graph.
+                    </Typography>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        size="large"
+                        startIcon={<ExploreIcon />}
+                        onClick={onNavigateAgents}
+                        sx={{ fontWeight: 900, borderRadius: 3, textTransform: 'none' }}
+                      >
+                        Explore agents
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="large"
+                        component="a"
+                        href="/nist#agent-trust-graph"
+                        sx={{ fontWeight: 900, borderRadius: 3, textTransform: 'none', borderColor: palette.borderStrong }}
+                      >
+                        Read the submission
+                      </Button>
+                    </Stack>
+                  </CardContent>
+                </Card>
               </CardContent>
             </Card>
 
