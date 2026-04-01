@@ -2,7 +2,7 @@
 
 **Submitted by:** Richard Pedersen  
 **Organization:** Agentic Trust / RichCanvas LLC  
-**Reference Implementation:** [https://agentictrust.io](https://agentictrust.io)  
+**Reference Implementation:** https://agentictrust.io  
 **Date:** April 2026  
 
 ---
@@ -15,69 +15,290 @@ Traditional identity systems are designed to answer:
 The concept paper implicitly requires answering a fundamentally different question:  
 **“Who or what is acting, under whose authority, in what context, and how is that action trusted and verified?”**
 
-This is not a minor extension of existing identity models. It is a shift in the nature of identity itself. If identity is not defined in relation to action, authority, context, and trust, then AI agent identity and authorization cannot be made auditable, enforceable, or secure.
+This is not a minor extension of existing identity models. It is a **shift in the nature of identity itself**.
+
+> **If identity is not defined in relation to action, authority, context, and trust, then AI agent identity and authorization cannot be made auditable, enforceable, or secure.**
+
+> **The agentic architecture described in the NCCoE concept paper (Actor → Agent → Tools/Data → Action) requires an explicit identity and relationship layer to securely connect these components.**
+
+---
 
 ## 2. Core Assertion: Agent Must Be the Root Concept
 
 The current framing risks treating AI agents as an extension of users or applications. That approach will not scale.
 
-**Agent must be the root identity concept.**
+> **Agent must be the root identity concept.**
 
-All of the following are agents:  
-- humans  
-- organizations  
-- AI agents  
-- digital twins  
+> **Agent Identity applies to all actors—human, organizational, and AI. AI Agent Identity is a specialization, not a new model.**
 
-AI Agent Identity is not a new category — it is a specialization of Agent Identity. Without this unification, identity models fragment, delegation becomes ambiguous, and accountability breaks down.
+Without this unification:
+- identity models fragment  
+- delegation becomes ambiguous  
+- accountability breaks down  
+
+---
 
 ## 3. Identity Requires an Anchor
 
-NIST correctly emphasizes identity proofing and unique resolution within a domain. This principle must be preserved.
+NIST correctly emphasizes identity proofing and unique resolution within a domain.
 
-However, AI agent systems require a **persistent, portable identifier** that anchors an agent across systems and contexts. The identifier anchors the agent. The agent anchors all identity, relationships, and trust.
+However, AI agent systems require:
 
-This is not theoretical. It is already implemented using decentralized identifier approaches and cryptographic identity systems.
+> **A persistent, portable identifier that anchors an agent across systems and contexts.**
+
+> **The identifier anchors the agent. The agent anchors all identity, relationships, and trust.**
+
+This is already implemented using decentralized identifiers and cryptographic identity systems.
+
+---
 
 ## 4. Identity Is Not Static — It Is Contextual
 
-Identity is not a single global record. It is expressed through context-specific facets.
+> **Identity is not a single global record. It is expressed through context-specific facets.**
 
-An agent may simultaneously act as:  
+An agent may simultaneously act as:
 - a patient in healthcare  
 - a participant in commerce  
 - a member of a community  
 - a delegate in governance  
 
-These are not separate identities — they are contextual projections of a single anchored agent. This aligns with NIST’s principle that identity is unique within a domain while allowing multiple identities across domains.
+These are **contextual projections of a single anchored agent**.
+
+This aligns with NIST’s principle that identity is unique within a domain while allowing multiple identities across domains.
+
+---
 
 ## 5. Identity Must Include Time and Evidence
 
-A critical gap in current models is the lack of distinction between persistent identity structures and time-based actions and evidence.
+A critical gap is the lack of distinction between:
 
-Trust cannot be derived from identity alone. It must be derived from observed behavior over time. In practical terms: relationships persist, actions occur, and trust evolves. Time-based events create and update trust-bearing relationships. Without this, “trust” becomes static and unreliable.
+- persistent identity structures  
+- time-based actions and evidence  
+
+> **Trust cannot be derived from identity alone. It must be derived from observed behavior over time.**
+
+In practical terms:
+- relationships persist  
+- actions occur  
+- trust evolves  
+
+> **Time-based events create and update trust-bearing relationships.**
+
+> **This reflects a provenance-based model where identity, actions, and outcomes are explicitly linked.**
+
+---
 
 ## 6. Trust Is Relational, Not Intrinsic
 
-Trust is not a property of an agent. It is a relationship between agents, evaluated in context.
+> **Trust is not a property of an agent. It is a relationship between agents, evaluated in context.**
 
-This is a fundamental principle. Trust must be:  
+Trust must be:
 - directional  
 - context-specific  
 - evidence-based  
 
-Current models that treat trust as a score or a static attribute are insufficient for agent ecosystems.
+Static trust models are insufficient for agent ecosystems.
+
+---
 
 ## 7. The Agent Trust Graph Is Required
 
-The above principles lead to a necessary conclusion: AI agent systems require a graph-based model of identity and trust.
+> **AI agent systems require a graph-based model of identity and trust.**
 
-The **Agent Trust Graph**:  
+The **Agent Trust Graph**:
+
 - represents all agents (human, organizational, AI)  
 - models relationships as first-class objects  
 - incorporates assertions, delegation, and history  
 - enables trust evaluation in context  
 
-Without a graph-based model, multi-agent systems cannot be made auditable or trustworthy.  
+> **Without a graph-based model, multi-agent systems cannot provide verifiable accountability or enforce trust decisions across delegated interactions.**
 
-My reference implementation already delivers this today through an **on-chain Agent Trust Graph (ERC-8004)** that records every validation, delegation, and feedback event as signed, immutable, queryable history. Reputation is enforced economically: validators stake, high-signal reviewers earn
+My reference implementation already delivers this today through an **on-chain Agent Trust Graph (ERC-8004)** that records every validation, delegation, and feedback event as signed, immutable, queryable history.
+
+---
+
+## 8. Discoverability Is a Security Requirement
+
+> **Discovery is not a convenience—it is the first phase of authorization.**
+
+Before an agent is invoked, it must be:
+- discoverable  
+- identifiable  
+- trust-evaluable  
+
+> **If discovery is not verifiable, execution cannot be trusted.**
+
+This requires:
+- a queryable knowledge base  
+- structured metadata  
+- verifiable endpoint binding  
+
+---
+
+## 9. ENS as a Trust Assertion Layer
+
+A decentralized naming layer (e.g., ENS) provides:
+
+> **A human-readable trust assertion surface for agent identity.**
+
+Each agent:
+- resolves to an identifier  
+- exposes structured metadata  
+- links to validation and relationships  
+
+---
+
+### 9.1 Ontology-Driven Schema
+
+Metadata is governed by a **foundational agentic trust ontology**:
+
+- agent types  
+- relationships  
+- claims  
+- capabilities  
+- endpoints  
+
+---
+
+### 9.2 Complement to Validation Protocols
+
+- ERC-8004 → verifiable claims  
+- ENS → discoverable identity  
+
+> **Together they form a complete trust assertion layer.**
+
+---
+
+### 9.3 Provenance Foundation (W3C PROV-O Alignment)
+
+> **The agentic trust ontology is grounded in a provenance-based model aligned with W3C PROV-O.**
+
+This models:
+
+- agents as accountable actors  
+- actions as events  
+- resources as entities  
+
+> **Identity, trust, and authorization are defined in relation to who acted, what was done, and what was affected.**
+
+This supports:
+
+- auditability  
+- non-repudiation  
+- data flow tracking  
+- trust evaluation over time  
+
+---
+
+## 10. Architecture Overview
+
+> **Agent → Identifier (Anchor) → Relationships (Graph) → Discovery → Execution → Trust Evaluation**
+
+---
+
+## 11. Protocol-Centric and Composable Architecture (Implemented Today)
+
+> **This architecture is protocol-centric and composable by design.**
+
+Each capability is an independent, interoperable layer:
+- identity anchoring  
+- relationship modeling  
+- validation  
+- authorization  
+- discoverability  
+
+This enables:
+- integration with existing enterprise systems  
+- alignment with OAuth, OIDC, and NGAC  
+- incremental adoption  
+- interoperability across domains  
+- independent evolution of components  
+
+---
+
+### Core Components
+
+- ERC-4337 — smart account execution and delegation  
+- ERC-8092 — relationship graph  
+- ERC-8004 — validation and trust assertions  
+- DID — identity anchor  
+- ENS — metadata and discovery  
+
+> **This stack composes existing identity and authorization models into a modular architecture without requiring centralized control.**
+
+---
+
+## 12. Working Implementations
+
+- https://agentictrust.io  
+- https://github.com/agentictrustlabs/agentic-trust  
+- https://github.com/agentictrustlabs/agent-explorer  
+- https://github.com/agentictrustlabs/agent-explorer/tree/main/docs/ontology  
+
+---
+
+## 13. Alignment with NIST (and Extension)
+
+This model aligns with:
+- Identity assurance (SP 800-63)  
+- Zero Trust (SP 800-207)  
+- auditability and logging  
+
+> **This model extends Zero Trust from resource access to agent-to-agent delegated authority.**
+
+---
+
+## 14. Direct Response to NCCoE Areas of Interest
+
+### Identification
+- Persistent identifier (DID/ENS)  
+- Ontology-based metadata  
+
+### Authentication
+- Cryptographic proof of control  
+- Delegation-aware validation  
+
+### Authorization
+- Graph-based, context-aware decisions  
+
+### Delegation
+- First-class, verifiable, scoped  
+
+### Auditing & Non-Repudiation
+- Signed, immutable event history  
+
+### Provenance
+- Linked to identity and actions  
+
+### Prompt Injection
+> **A trust problem — evaluate source identity before accepting input**
+
+---
+
+## 15. Recommendations
+
+- Agent as root concept  
+- Persistent identifier anchors  
+- Contextual identity  
+- Graph-based relationships  
+- Delegation as first-class  
+- Provenance-based accountability  
+- Discoverability as security layer  
+- Ontology-based schemas  
+- Trust assertion layers  
+- Protocol-based implementations  
+
+---
+
+## 16. Closing
+
+> **AI agent identity requires a shift to an agent-centric, relationship-driven, evidence-based model.**
+
+These principles:
+- extend NIST thinking  
+- align with existing standards  
+- are validated through working systems  
+
+> **The opportunity is not to adapt existing identity models to agents, but to define an agent-native foundation for identity, delegation, and trust.  
+This foundation already exists and can serve as a reference architecture for NCCoE collaboration.**

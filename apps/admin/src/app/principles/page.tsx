@@ -82,12 +82,18 @@ export default function PrinciplesPage() {
                 Back to home
               </Button>
               <MuiLink
+                href="/submission"
+                sx={{ alignSelf: { sm: 'center' }, fontWeight: 900 }}
+              >
+                Full submission (rendered) →
+              </MuiLink>
+              <MuiLink
                 href={SUBMISSION_MD_URL}
                 target="_blank"
                 rel="noreferrer"
                 sx={{ alignSelf: { sm: 'center' }, fontWeight: 900 }}
               >
-                Full submission (Markdown) →
+                View on GitHub →
               </MuiLink>
             </Stack>
           </Box>
