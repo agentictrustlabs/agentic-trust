@@ -116,47 +116,7 @@ export default function SubmissionPage() {
           {!loadingDoc && !error && (
             <Card variant="outlined" sx={{ borderRadius: 4, borderColor: palette.border, backgroundColor: 'background.paper' }}>
               <CardContent sx={{ px: { xs: 2.5, md: 4 }, py: { xs: 2.5, md: 3.5 } }}>
-                <Box
-                  sx={{
-                    '& h1': { typography: 'h4', fontWeight: 900, mt: 2.5, mb: 1 },
-                    '& h2': { typography: 'h5', fontWeight: 900, mt: 2.5, mb: 1 },
-                    '& h3': { typography: 'h6', fontWeight: 900, mt: 2.25, mb: 1 },
-                    '& p': { typography: 'body1', color: 'text.secondary', mb: 1.5 },
-                    '& ul, & ol': { pl: 3.5, mb: 1.5, color: 'text.secondary' },
-                    '& li': { mb: 0.5 },
-                    '& a': { color: 'primary.main', fontWeight: 800 },
-                    '& blockquote': {
-                      m: 0,
-                      my: 2,
-                      px: 2,
-                      py: 1.5,
-                      borderLeft: `4px solid ${palette.borderStrong}`,
-                      backgroundColor: palette.surfaceMuted,
-                      borderRadius: 2,
-                    },
-                    '& code': {
-                      fontFamily: 'monospace',
-                      fontSize: '0.95em',
-                      backgroundColor: palette.surfaceMuted,
-                      border: `1px solid ${palette.border}`,
-                      borderRadius: 1.5,
-                      px: 0.75,
-                      py: 0.2,
-                    },
-                    '& pre': {
-                      overflowX: 'auto',
-                      p: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${palette.border}`,
-                      backgroundColor: palette.surfaceMuted,
-                    },
-                    '& pre code': {
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      p: 0,
-                    },
-                  }}
-                >
+                <Box className="markdown-body">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[

@@ -220,6 +220,7 @@ This enables:
 ### Core Components
 
 - ERC-4337 — smart account execution and delegation  
+- ERC-7710 — agent delegation standard (portable, scoped authority)  
 - ERC-8092 — relationship graph  
 - ERC-8004 — validation and trust assertions  
 - DID — identity anchor  
@@ -268,6 +269,8 @@ This model aligns with:
 
 ### Delegation
 - First-class, verifiable, scoped  
+- Delegation is a core agent-platform primitive: agents must be able to present portable, bounded authority to act on behalf of an agent identifier across services and domains (not just within a single application session).  
+- Agent Delegation Standards (e.g., **ERC-7710**) provide a shared, verifiable way to express and validate scoped authority, enabling consistent enforcement and audit across multi-agent interactions.  
 
 ### Auditing & Non-Repudiation
 - Signed, immutable event history  
