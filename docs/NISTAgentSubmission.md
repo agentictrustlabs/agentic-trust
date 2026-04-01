@@ -48,7 +48,7 @@ However, AI agent systems require:
 
 > **The identifier anchors the agent. The agent anchors all identity, relationships, and trust.**
 
-In practice, this is expressed as a **Universal Agent Identifier (UAID)** paired with an **Agent Registry** that enables consistent resolution across ecosystems while still supporting domain-specific registries and policies (a faceted identity model). Standards like **HCS-14** directly support this UAID + Agent Registry approach.
+In practice, this is expressed as a **Universal Agent Identifier (UAID)** paired with an **Agent Registries** that enables consistent resolution across ecosystems while still supporting domain-specific registries and policies (a faceted identity model). Standards like **HCS-14** directly support this UAID + Agent Registry approach.
 
 This is already implemented using decentralized identifiers and cryptographic identity systems.
 
