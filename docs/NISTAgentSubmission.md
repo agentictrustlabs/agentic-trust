@@ -229,11 +229,11 @@ This enables:
 
 ### Core Components
 
-- ERC-4337 — smart account execution and delegation  
+- ERC-4337, ERC-1271 — smart account execution, delegation and signature validation  
 - ERC-7710 — agent delegation standard (portable, scoped authority)  
 - ERC-8092 — relationship graph  
 - ERC-8004 — validation and trust assertions  
-- DID — identity anchor  
+- DID (did:ethr) — identity anchor  
 - HCS-14 — Universal Agent Identifier (UAID) + Agent Registry
 - ENS — metadata and discovery  
 - SIWE for agents + MCP, but fully Web3-native — agent authentication and tool invocation bound to the anchored agent identifier, delegated authority, and verifiable context  
