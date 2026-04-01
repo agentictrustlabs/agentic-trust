@@ -48,6 +48,8 @@ However, AI agent systems require:
 
 > **The identifier anchors the agent. The agent anchors all identity, relationships, and trust.**
 
+In practice, this is expressed as a **Universal Agent Identifier (UAID)** paired with an **Agent Registry** that enables consistent resolution across ecosystems while still supporting domain-specific registries and policies (a faceted identity model). Standards like **HCS-14** directly support this UAID + Agent Registry approach.
+
 This is already implemented using decentralized identifiers and cryptographic identity systems.
 
 ---
@@ -224,6 +226,7 @@ This enables:
 - ERC-8092 — relationship graph  
 - ERC-8004 — validation and trust assertions  
 - DID — identity anchor  
+- HCS-14 — Universal Agent Identifier (UAID) + Agent Registry
 - ENS — metadata and discovery  
 - SIWE for agents + MCP, but fully Web3-native — agent authentication and tool invocation bound to the anchored agent identifier, delegated authority, and verifiable context  
 
@@ -256,6 +259,7 @@ This model aligns with:
 
 ### Identification
 - Persistent identifier (DID/ENS)  
+- Universal Agent Identifier (UAID) + Agent Registry (HCS-14)  
 - Ontology-based metadata  
 
 ### Authentication
