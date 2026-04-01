@@ -247,7 +247,7 @@ export function HomePage({
   const primaryHeroCta = 'Explore Live Agents →';
   const secondaryHeroCta = 'See how the stack works ↓';
   const explorerCta = 'Agent Explorer →';
-  const nistCta = 'Read the NIST submission →';
+  const principlesCta = 'Read the principles →';
 
   const stackRef = useRef<HTMLDivElement | null>(null);
   const scrollToStack = useCallback(() => {
@@ -352,7 +352,7 @@ export function HomePage({
                   variant="text"
                   size="large"
                   component="a"
-                  href="/nist"
+                  href="/principles"
                   sx={{
                     fontSize: '1.02rem',
                     fontWeight: 900,
@@ -362,7 +362,7 @@ export function HomePage({
                     textTransform: 'none',
                   }}
                 >
-                  {nistCta}
+                  {principlesCta}
                 </Button>
               </Stack>
 
@@ -611,7 +611,7 @@ export function HomePage({
               </CardContent>
             </Card>
 
-            {/* NIST-aligned principles */}
+            {/* Principles */}
             <Card
               variant="outlined"
               sx={{
@@ -622,7 +622,7 @@ export function HomePage({
             >
               <CardContent>
                 <Typography variant="h4" fontWeight={900} gutterBottom>
-                  NIST-aligned principles
+                  Principles for agent identity & trust
                 </Typography>
                 <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 980 }}>
                   This homepage and the Agent Explorer are built to reflect a specific framing: agent identity is defined in
@@ -647,7 +647,7 @@ export function HomePage({
                         Not “who is the user?”, but “who/what is acting, under whose authority, in what context, and how is it
                         verified?”
                       </Typography>
-                      <MuiLink href="/nist#problem-reframing" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                      <MuiLink href="/principles#problem-reframing" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
                         Read more →
                       </MuiLink>
                     </CardContent>
@@ -661,7 +661,7 @@ export function HomePage({
                       <Typography variant="body2" color="text.secondary">
                         Humans, orgs, and AI are all agents. A unified model keeps delegation and accountability coherent.
                       </Typography>
-                      <MuiLink href="/nist#agent-root" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                      <MuiLink href="/principles#agent-root" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
                         Read more →
                       </MuiLink>
                     </CardContent>
@@ -675,7 +675,7 @@ export function HomePage({
                       <Typography variant="body2" color="text.secondary">
                         A persistent, portable identifier anchors an agent across systems and contexts (UAID / DID patterns).
                       </Typography>
-                      <MuiLink href="/nist#identity-anchor" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                      <MuiLink href="/principles#identity-anchor" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
                         Read more →
                       </MuiLink>
                     </CardContent>
@@ -698,7 +698,7 @@ export function HomePage({
                       <Typography variant="body2" color="text.secondary">
                         The same anchored agent projects different facets across domains without fragmenting accountability.
                       </Typography>
-                      <MuiLink href="/nist#contextual-identity" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                      <MuiLink href="/principles#contextual-identity" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
                         Read more →
                       </MuiLink>
                     </CardContent>
@@ -712,7 +712,7 @@ export function HomePage({
                       <Typography variant="body2" color="text.secondary">
                         Trust evolves from signed actions and evidence over time — not static identity records.
                       </Typography>
-                      <MuiLink href="/nist#time-and-evidence" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                      <MuiLink href="/principles#time-and-evidence" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
                         Read more →
                       </MuiLink>
                     </CardContent>
@@ -726,7 +726,7 @@ export function HomePage({
                       <Typography variant="body2" color="text.secondary">
                         Directional, context-specific, evidence-based trust relationships are first-class.
                       </Typography>
-                      <MuiLink href="/nist#relational-trust" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
+                      <MuiLink href="/principles#relational-trust" sx={{ display: 'inline-block', mt: 1.5, fontWeight: 800 }}>
                         Read more →
                       </MuiLink>
                     </CardContent>
@@ -764,10 +764,10 @@ export function HomePage({
                         variant="outlined"
                         size="large"
                         component="a"
-                        href="/nist#agent-trust-graph"
+                        href="/principles#agent-trust-graph"
                         sx={{ fontWeight: 900, borderRadius: 3, textTransform: 'none', borderColor: palette.borderStrong }}
                       >
-                        Read the submission
+                        Read the principles
                       </Button>
                     </Stack>
                   </CardContent>
