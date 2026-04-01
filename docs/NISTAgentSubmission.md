@@ -116,6 +116,14 @@ The **Agent Trust Graph**:
 
 > **Without a graph-based model, multi-agent systems cannot provide verifiable accountability or enforce trust decisions across delegated interactions.**
 
+This manifests through **standards-based protocols** at the protocol layer:
+- **Agent Identifier** — UAID + Agent Registry (HCS-14) and DID/ENS anchoring  
+- **Agent Authorization** — scoped, portable authority and delegation (e.g., ERC-7710)  
+- **Agent Relationships** — first-class relationship graph (ERC-8092)  
+- **Assertions / Claims** — verifiable trust signals and evidence (ERC-8004 validations, feedback, attestations)  
+
+These protocol-layer primitives are then surfaced during **discovery and engagement** via a standards-based **agentic trust ontology** (queryable knowledge base + structured metadata + verifiable endpoint bindings).
+
 My reference implementation already delivers this today through an **on-chain Agent Trust Graph (ERC-8004)** that records every validation, delegation, and feedback event as signed, immutable, queryable history.
 
 ---
