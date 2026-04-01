@@ -54,7 +54,7 @@ This is already implemented using decentralized identifiers and cryptographic id
 
 ## 4. Identity Is Not Static — It Is Contextual
 
-> **Identity is not a single global record. It is expressed through context-specific facets.**
+> **Identity is not a single global record. It is expressed through domain-scoped registries and context-specific facets.**
 
 An agent may simultaneously act as:
 - a patient in healthcare  
@@ -62,9 +62,9 @@ An agent may simultaneously act as:
 - a member of a community  
 - a delegate in governance  
 
-These are **contextual projections of a single anchored agent**.
+These are **domain projections of a single anchored agent**—the same agent, expressed through different registries, roles, and policies.
 
-This aligns with NIST’s principle that identity is unique within a domain while allowing multiple identities across domains.
+This preserves **uniqueness within each domain registry** while enabling **portable, multi-domain participation** without fragmenting accountability.
 
 ---
 
@@ -224,6 +224,7 @@ This enables:
 - ERC-8004 — validation and trust assertions  
 - DID — identity anchor  
 - ENS — metadata and discovery  
+- SIWE for agents + MCP, but fully Web3-native — agent authentication and tool invocation bound to the anchored agent identifier, delegated authority, and verifiable context  
 
 > **This stack composes existing identity and authorization models into a modular architecture without requiring centralized control.**
 
@@ -235,6 +236,7 @@ This enables:
 - https://github.com/agentictrustlabs/agentic-trust  
 - https://github.com/agentictrustlabs/agent-explorer  
 - https://github.com/agentictrustlabs/agent-explorer/tree/main/docs/ontology  
+- https://github.com/RichCanvas3/ens-node-metadata  *(implementation of ENS metadata standard)*
 
 ---
 
@@ -258,6 +260,8 @@ This model aligns with:
 ### Authentication
 - Cryptographic proof of control  
 - Delegation-aware validation  
+- Agent authentication must be anchored to the agent identifier model (not a user session model): when an agent connects to a service or invokes tools, it should authenticate *as the agent* (via its portable identifier), present scoped authority (delegation/session constraints), and bind that authorization to a verifiable context trail.  
+- A practical path is **“SIWE for agents + MCP, but fully Web3-native”**: a sign-in and session handshake patterned after SIWE, extended to agent identifiers and delegated authority, plus MCP-compatible capability/tool declarations so services can verify *who is acting*, *under what authority*, and *what they are allowed to do*.  
 
 ### Authorization
 - Graph-based, context-aware decisions  
