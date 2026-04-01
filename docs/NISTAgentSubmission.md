@@ -124,7 +124,7 @@ This manifests through **standards-based protocols** at the protocol layer:
 
 These protocol-layer primitives are then surfaced during **discovery and engagement** via a standards-based **agentic trust ontology** (queryable knowledge base + structured metadata + verifiable endpoint bindings).
 
-My reference implementation already delivers this today through an **on-chain Agent Trust Graph (ERC-8004)** that records every validation, delegation, and feedback event as signed, immutable, queryable history.
+The reference implementation delivers this through an **on-chain Agent Trust Graph** that records every validation, delegation, and feedback event as signed, immutable, queryable history.
 
 ---
 
