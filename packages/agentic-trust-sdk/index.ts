@@ -32,12 +32,18 @@ export { graphQLSchemaString, buildGraphQLSchema } from './schema';
 export { graphQLSchemaStringKb, buildGraphQLSchemaKb } from './schemaKb';
 export {
   ENS_AGENT_CLASS,
+  ENS_AGENT_DEFAULT_ORG_SUFFIX,
   ENS_AGENT_SCHEMA_VERSION,
   ENS_AGENT_METADATA_KEYS,
+  ENS_AGENT_SCHEMA_FIELDS,
+  buildDefaultEnsAgentRegistrationsPayload,
+  buildDefaultEnsAgentServicesPayload,
+  buildEnsAgentSchemaDocument,
   buildEnsAgentCanonicalPayload,
   buildEnsAgentMetadataRecords,
   buildEnsAgentServicesPayload,
   computeEnsAgentMetadataDelta,
+  deriveEnsAgentNameFromEnsName,
   parseEnsAgentMetadataRecords,
   parseStringArray,
   readEnsAgentMetadata,
@@ -46,6 +52,7 @@ export {
   type EnsAgentMetadataKey,
   type EnsAgentMetadataRecord,
   type EnsAgentRegistrationEntry,
+  type EnsAgentSchemaDocument,
   type EnsAgentServiceEndpoint,
   type EnsAgentServicesPayload,
 } from './ENSAgentMetadataClient';

@@ -2,6 +2,7 @@ import { computeDelta, metadataReader } from '@ensmetadata/sdk';
 
 export const ENS_AGENT_CLASS = 'Agent';
 export const ENS_AGENT_SCHEMA_VERSION = '2.0.0';
+export const ENS_AGENT_DEFAULT_ORG_SUFFIX = '.8004-agent.eth';
 
 export const ENS_AGENT_METADATA_KEYS = [
   'class',
@@ -16,6 +17,21 @@ export const ENS_AGENT_METADATA_KEYS = [
   'registrations',
   'supported-trust',
   'agent-wallet',
+] as const;
+
+export const ENS_AGENT_SCHEMA_FIELDS = [
+  { key: 'class', type: 'string', description: 'ENS node classification. Use "Agent".' },
+  { key: 'schema', type: 'string', description: 'URI to the Agent schema definition.' },
+  { key: 'agent-uri', type: 'string', description: 'Canonical agent registration document URI.' },
+  { key: 'name', type: 'string', description: 'Human-readable display name for the agent.' },
+  { key: 'description', type: 'string', description: 'Short summary shown in discovery and wallets.' },
+  { key: 'avatar', type: 'string', description: 'Avatar or image URI.' },
+  { key: 'services', type: 'string', description: 'URI to a services payload document.' },
+  { key: 'x402-support', type: 'string', description: 'Boolean-like text indicating x402 support.' },
+  { key: 'active', type: 'string', description: 'Boolean-like text indicating operational availability.' },
+  { key: 'registrations', type: 'string', description: 'URI to a registrations payload document.' },
+  { key: 'supported-trust', type: 'string', description: 'Short trust taxonomy or serialized list.' },
+  { key: 'agent-wallet', type: 'string', description: 'Address where the agent receives payments.' },
 ] as const;
 
 export type EnsAgentMetadataKey = (typeof ENS_AGENT_METADATA_KEYS)[number];
@@ -33,6 +49,7 @@ export type EnsAgentServicesPayload = {
   web?: EnsAgentServiceEndpoint | null;
   mcp?: EnsAgentServiceEndpoint | null;
   a2a?: EnsAgentServiceEndpoint | null;
+  ens?: EnsAgentServiceEndpoint | null;
   [key: string]: unknown;
 };
 
@@ -64,6 +81,9 @@ export type EnsAgentCanonicalPayload = {
   name: string;
   description?: string;
   image?: string;
+  identifier?: string;
+  did?: string;
+  ensName?: string;
   services?: EnsAgentServicesPayload;
   servicesUri?: string;
   x402Support?: boolean;
@@ -72,6 +92,18 @@ export type EnsAgentCanonicalPayload = {
   registrationsUri?: string;
   supportedTrust?: string[];
   agentWallet?: string;
+};
+
+export type EnsAgentSchemaDocument = {
+  class: string;
+  version: string;
+  title: string;
+  description: string;
+  fields: ReadonlyArray<{
+    key: string;
+    type: string;
+    description: string;
+  }>;
 };
 
 function asTrimmedString(value: unknown): string {
@@ -97,6 +129,31 @@ export function parseStringArray(value: unknown): string[] {
     .split(/\r?\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+export function deriveEnsAgentNameFromEnsName(
+  ensName: string,
+  orgSuffix = ENS_AGENT_DEFAULT_ORG_SUFFIX,
+): string {
+  const normalized = String(ensName || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (normalized.endsWith(orgSuffix)) {
+    return normalized.slice(0, -orgSuffix.length);
+  }
+  if (normalized.endsWith('.eth')) {
+    return normalized.slice(0, -'.eth'.length);
+  }
+  return normalized;
+}
+
+export function buildEnsAgentSchemaDocument(): EnsAgentSchemaDocument {
+  return {
+    class: ENS_AGENT_CLASS,
+    version: ENS_AGENT_SCHEMA_VERSION,
+    title: 'Agent',
+    description: 'Agent class metadata for ENS nodes aligned to Agent discovery and ERC-8004 registration pointers.',
+    fields: ENS_AGENT_SCHEMA_FIELDS.map((field) => ({ ...field })),
+  };
 }
 
 export function serializeSupportedTrust(values: string[]): string {
@@ -163,24 +220,104 @@ export function buildEnsAgentServicesPayload(input: {
   webUrl?: string;
   mcpUrl?: string;
   a2aUrl?: string;
+  ensName?: string;
+  agentDid?: string;
   web?: EnsAgentServiceEndpoint | null;
   mcp?: EnsAgentServiceEndpoint | null;
   a2a?: EnsAgentServiceEndpoint | null;
+  ens?: EnsAgentServiceEndpoint | null;
 }): EnsAgentServicesPayload {
   const payload: EnsAgentServicesPayload = {};
   const webUrl = asTrimmedString(input.webUrl);
   const mcpUrl = asTrimmedString(input.mcpUrl);
   const a2aUrl = asTrimmedString(input.a2aUrl);
+  const ensName = asTrimmedString(input.ensName);
+  const agentDid = asTrimmedString(input.agentDid);
   if (input.web || webUrl) payload.web = input.web ?? { url: webUrl };
   if (input.mcp || mcpUrl) payload.mcp = input.mcp ?? { url: mcpUrl };
   if (input.a2a || a2aUrl) payload.a2a = input.a2a ?? { url: a2aUrl };
+  if (input.ens || ensName) {
+    payload.ens = input.ens ?? {
+      url: ensName ? `ens://${ensName}` : 'ens://',
+      label: 'ENS',
+      name: ensName,
+      did: agentDid || undefined,
+    };
+  }
   return payload;
+}
+
+export function buildDefaultEnsAgentServicesPayload(input: {
+  baseUrl?: string;
+  a2aUrl?: string;
+  mcpUrl?: string;
+  webUrl?: string;
+  ensName?: string;
+  agentDid?: string;
+}): EnsAgentServicesPayload {
+  const baseUrl = asTrimmedString(input.baseUrl);
+  const webUrl = asTrimmedString(input.webUrl) || baseUrl;
+  const a2aUrl =
+    asTrimmedString(input.a2aUrl) || (baseUrl ? `${baseUrl.replace(/\/$/, '')}/.well-known/agent-card.json` : '');
+  const mcpUrl = asTrimmedString(input.mcpUrl);
+  return buildEnsAgentServicesPayload({
+    webUrl,
+    a2aUrl,
+    mcpUrl,
+    ensName: input.ensName,
+    agentDid: input.agentDid,
+  });
+}
+
+export function buildDefaultEnsAgentRegistrationsPayload(input: {
+  chainId?: number | null;
+  agentId?: string | number | null;
+  uaid?: string | null;
+  ensName?: string | null;
+  agentDid?: string | null;
+  agentWallet?: string | null;
+}): EnsAgentRegistrationEntry[] {
+  const entries: EnsAgentRegistrationEntry[] = [];
+  if (input.chainId && input.agentId !== undefined && input.agentId !== null && String(input.agentId).trim()) {
+    entries.push({
+      system: 'erc8004',
+      chain: `eip155:${input.chainId}`,
+      id: String(input.agentId),
+    });
+  }
+  if (input.ensName && String(input.ensName).trim()) {
+    entries.push({
+      system: 'ens',
+      chain: input.chainId ? `eip155:${input.chainId}` : undefined,
+      id: String(input.ensName).trim(),
+      name: String(input.ensName).trim(),
+    });
+  }
+  if (input.agentDid && String(input.agentDid).trim()) {
+    entries.push({
+      system: 'did',
+      chain: input.chainId ? `eip155:${input.chainId}` : undefined,
+      id: String(input.agentDid).trim(),
+      did: String(input.agentDid).trim(),
+      type: 'did:ethr',
+      wallet: input.agentWallet ? String(input.agentWallet).trim() : undefined,
+    });
+  }
+  if (input.uaid && String(input.uaid).trim()) {
+    entries.push({
+      system: 'uaid',
+      id: String(input.uaid).trim(),
+    });
+  }
+  return entries;
 }
 
 export function buildEnsAgentCanonicalPayload(input: {
   metadata: Partial<EnsAgentMetadataRecord>;
   servicesPayload?: EnsAgentServicesPayload | null;
   registrationsPayload?: EnsAgentRegistrationEntry[] | null;
+  agentDid?: string;
+  ensName?: string;
 }): EnsAgentCanonicalPayload {
   const normalized = parseEnsAgentMetadataRecords(
     buildEnsAgentMetadataRecords(input.metadata as Partial<EnsAgentMetadataRecord>),
@@ -193,6 +330,11 @@ export function buildEnsAgentCanonicalPayload(input: {
 
   if (normalized.description) payload.description = normalized.description;
   if (normalized.avatar) payload.image = normalized.avatar;
+  if (input.agentDid) {
+    payload.identifier = input.agentDid;
+    payload.did = input.agentDid;
+  }
+  if (input.ensName) payload.ensName = input.ensName;
   if (normalized.services) payload.servicesUri = normalized.services;
   if (input.servicesPayload && Object.keys(input.servicesPayload).length > 0) {
     payload.services = input.servicesPayload;

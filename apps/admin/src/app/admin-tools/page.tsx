@@ -11,7 +11,7 @@ import { Header } from '@/components/Header';
 import { useAuth } from '@/components/AuthProvider';
 import type { Address, Chain } from 'viem';
 import { keccak256, toHex, getAddress, createPublicClient, http } from 'viem';
-import { buildDid8004, parseDid8004, generateSessionPackage, generateSmartAgentDelegationSessionPackage, getDeployedAccountClientByAddress, getDeployedAccountClientByAgentName, updateAgentRegistrationWithWallet, requestNameValidationWithWallet, requestAccountValidationWithWallet, requestAppValidationWithWallet, requestAIDValidationWithWallet } from '@agentic-trust/core';
+import { ENS_AGENT_CLASS, buildDefaultEnsAgentRegistrationsPayload, buildDefaultEnsAgentServicesPayload, buildEnsAgentCanonicalPayload, buildEnsAgentSchemaDocument, buildEnsAgentServicesPayload, buildDid8004, deriveEnsAgentNameFromEnsName, parseDid8004, generateSessionPackage, generateSmartAgentDelegationSessionPackage, getDeployedAccountClientByAddress, getDeployedAccountClientByAgentName, updateAgentRegistrationWithWallet, requestNameValidationWithWallet, requestAccountValidationWithWallet, requestAppValidationWithWallet, requestAIDValidationWithWallet } from '@agentic-trust/core';
 import { sendSponsoredUserOperation, waitForUserOperationReceipt } from '@agentic-trust/core/client';
 import type { DiscoverParams as AgentSearchParams, DiscoverResponse, ValidationStatus } from '@agentic-trust/core/server';
 import {
@@ -1476,8 +1476,14 @@ export default function AdminPage() {
   const [ensAgentMetadata, setEnsAgentMetadata] = useState<EnsAgentMetadataForm>(EMPTY_ENS_AGENT_METADATA);
   const [ensAgentMetadataLoading, setEnsAgentMetadataLoading] = useState(false);
   const [ensAgentMetadataSaving, setEnsAgentMetadataSaving] = useState(false);
+  const [ensAgentMetadataDefaulting, setEnsAgentMetadataDefaulting] = useState(false);
   const [ensAgentMetadataError, setEnsAgentMetadataError] = useState<string | null>(null);
   const [ensAgentMetadataSuccess, setEnsAgentMetadataSuccess] = useState<string | null>(null);
+  const [ensMetadataPreviewDialog, setEnsMetadataPreviewDialog] = useState<{
+    open: boolean;
+    title: string;
+    body: string;
+  }>({ open: false, title: '', body: '' });
   
   // OASF Skills and Domains for A2A protocol
   const [registrationA2aSkills, setRegistrationA2aSkills] = useState<string[]>([]);
@@ -2630,6 +2636,316 @@ export default function AdminPage() {
     }
   }, [hasSmartAgentBase, smartAgentEnsName, finalChainId, loadEnsAgentMetadata]);
 
+  const uploadJsonToIpfs = useCallback(async (payload: unknown, filename: string): Promise<string> => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const formData = new FormData();
+    formData.append('file', blob, filename);
+    const response = await fetch('/api/ipfs/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((data as any)?.message || (data as any)?.error || 'Failed to upload JSON to IPFS.');
+    }
+    const tokenUri = typeof (data as any)?.tokenUri === 'string' ? (data as any).tokenUri : '';
+    if (!tokenUri) {
+      throw new Error('IPFS upload did not return a token URI.');
+    }
+    return tokenUri;
+  }, []);
+
+  const fetchEnsUrlAndAgentCard = useCallback(async (): Promise<{ baseUrl: string; agentCardUrl: string; agentCard: any | null }> => {
+    if (!smartAgentEnsName || !finalChainId) {
+      return { baseUrl: '', agentCardUrl: '', agentCard: null };
+    }
+    const parsedChainId = Number.parseInt(finalChainId, 10);
+    if (!Number.isFinite(parsedChainId)) {
+      return { baseUrl: '', agentCardUrl: '', agentCard: null };
+    }
+
+    let baseUrl = '';
+    try {
+      const ensResponse = await fetch(
+        `/api/ens/agent?name=${encodeURIComponent(smartAgentEnsName)}&chainId=${parsedChainId}`,
+        { cache: 'no-store' },
+      );
+      const ensData = await ensResponse.json().catch(() => ({}));
+      if (ensResponse.ok && typeof (ensData as any)?.agentUrl === 'string') {
+        baseUrl = String((ensData as any).agentUrl).trim();
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!baseUrl) {
+      baseUrl = ensAgentMetadata.serviceWeb.trim();
+    }
+
+    const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+    const agentCardUrl = normalizedBaseUrl ? `${normalizedBaseUrl}/.well-known/agent-card.json` : '';
+    if (!agentCardUrl) {
+      return { baseUrl: normalizedBaseUrl, agentCardUrl: '', agentCard: null };
+    }
+
+    try {
+      const cardResponse = await fetch(`/api/a2a/card?url=${encodeURIComponent(agentCardUrl)}`, {
+        cache: 'no-store',
+      });
+      if (!cardResponse.ok) {
+        return { baseUrl: normalizedBaseUrl, agentCardUrl, agentCard: null };
+      }
+      const cardData = await cardResponse.json().catch(() => ({}));
+      const agentCard = (cardData as any)?.card ?? null;
+      return { baseUrl: normalizedBaseUrl, agentCardUrl, agentCard };
+    } catch {
+      return { baseUrl: normalizedBaseUrl, agentCardUrl, agentCard: null };
+    }
+  }, [smartAgentEnsName, finalChainId, ensAgentMetadata.serviceWeb]);
+
+  const handleApplyEnsDefaults = useCallback(
+    async (target: 'name' | 'schema' | 'services' | 'registrations' | 'agentUri' | 'all') => {
+      if (!smartAgentEnsName) return;
+
+      try {
+        setEnsAgentMetadataDefaulting(true);
+        setEnsAgentMetadataError(null);
+        setEnsAgentMetadataSuccess(null);
+
+        const derivedName = deriveEnsAgentNameFromEnsName(smartAgentEnsName);
+        const needsRemote = target === 'services' || target === 'registrations' || target === 'agentUri' || target === 'all';
+        const remote = needsRemote ? await fetchEnsUrlAndAgentCard() : { baseUrl: '', agentCardUrl: '', agentCard: null };
+
+        let next = { ...ensAgentMetadata };
+        const parsedChainId = finalChainId ? Number.parseInt(finalChainId, 10) : null;
+
+        if (target === 'name' || target === 'all') {
+          next.class = ENS_AGENT_CLASS;
+          next.name = derivedName;
+          if (!next.agentWallet.trim() && displayAgentAddress) {
+            next.agentWallet = displayAgentAddress;
+          }
+        }
+
+        if (target === 'schema' || target === 'all') {
+          const schemaDoc = buildEnsAgentSchemaDocument();
+          const schemaUri = await uploadJsonToIpfs(schemaDoc, `${derivedName || 'agent'}-schema.json`);
+          next.class = ENS_AGENT_CLASS;
+          next.schema = schemaUri;
+        }
+
+        if (target === 'services' || target === 'all') {
+          const servicesPayload =
+            remote.agentCard && typeof remote.agentCard === 'object'
+              ? buildDefaultEnsAgentServicesPayload({
+                  baseUrl: remote.baseUrl,
+                  webUrl: remote.baseUrl,
+                  a2aUrl: remote.agentCardUrl,
+                  ensName: smartAgentEnsName,
+                  agentDid: smartAgentDid ?? undefined,
+                  mcpUrl:
+                    typeof remote.agentCard?.mcp === 'string'
+                      ? remote.agentCard.mcp
+                      : typeof remote.agentCard?.services?.mcp?.url === 'string'
+                        ? remote.agentCard.services.mcp.url
+                        : '',
+                })
+              : buildDefaultEnsAgentServicesPayload({
+                  baseUrl: remote.baseUrl,
+                  webUrl: remote.baseUrl,
+                  a2aUrl: remote.agentCardUrl,
+                  ensName: smartAgentEnsName,
+                  agentDid: smartAgentDid ?? undefined,
+                });
+          const servicesUri = await uploadJsonToIpfs(servicesPayload, `${derivedName || 'agent'}-services.json`);
+          next.services = servicesUri;
+          next.serviceWeb = typeof servicesPayload.web?.url === 'string' ? servicesPayload.web.url : '';
+          next.serviceMcp = typeof servicesPayload.mcp?.url === 'string' ? servicesPayload.mcp.url : '';
+          next.serviceA2a = typeof servicesPayload.a2a?.url === 'string' ? servicesPayload.a2a.url : '';
+          next.servicesPayloadText = JSON.stringify(servicesPayload, null, 2);
+        }
+
+        if (target === 'registrations' || target === 'all') {
+          const registrationsPayload = buildDefaultEnsAgentRegistrationsPayload({
+            chainId: parsedChainId,
+            agentId: hasErc8004Extension ? finalAgentId : null,
+            uaid: agentUaidForApi,
+            ensName: smartAgentEnsName,
+            agentDid: smartAgentDid ?? null,
+            agentWallet: displayAgentAddress ?? null,
+          });
+          const registrationsUri = await uploadJsonToIpfs(
+            registrationsPayload,
+            `${derivedName || 'agent'}-registrations.json`,
+          );
+          next.registrations = registrationsUri;
+          next.registrationsPayloadText = JSON.stringify(registrationsPayload, null, 2);
+        }
+
+        if (target === 'agentUri' || target === 'all') {
+          const servicesPayload = parseJsonInput(
+            next.servicesPayloadText,
+            buildEnsAgentServicesPayload({
+              webUrl: next.serviceWeb,
+              mcpUrl: next.serviceMcp,
+              a2aUrl: next.serviceA2a,
+            }),
+          );
+          const registrationsPayload = parseJsonInput(next.registrationsPayloadText, []);
+          const canonical = buildEnsAgentCanonicalPayload({
+            metadata: {
+              class: next.class,
+              schema: next.schema,
+              agentUri: next.agentUri,
+              name: next.name || derivedName,
+              description: next.description,
+              avatar: next.avatar,
+              services: next.services,
+              x402Support: next.x402Support,
+              active: next.active,
+              registrations: next.registrations,
+              supportedTrust: next.supportedTrust,
+              agentWallet: next.agentWallet || displayAgentAddress || '',
+            },
+            servicesPayload,
+            registrationsPayload,
+            agentDid: smartAgentDid ?? undefined,
+            ensName: smartAgentEnsName,
+          });
+          const agentUri = await uploadJsonToIpfs(canonical, `${derivedName || 'agent'}-agent.json`);
+          next.agentUri = agentUri;
+          next.agentDocumentText = JSON.stringify(canonical, null, 2);
+        }
+
+        setEnsAgentMetadata(next);
+        setEnsAgentMetadataSuccess(
+          target === 'all' ? 'Applied all suggested ENS metadata defaults.' : `Applied suggested ${target} default.`,
+        );
+      } catch (error: any) {
+        setEnsAgentMetadataError(error?.message || 'Failed to apply ENS metadata defaults.');
+      } finally {
+        setEnsAgentMetadataDefaulting(false);
+      }
+    },
+    [
+      smartAgentEnsName,
+      fetchEnsUrlAndAgentCard,
+      ensAgentMetadata,
+      finalChainId,
+      displayAgentAddress,
+      smartAgentDid,
+      hasErc8004Extension,
+      finalAgentId,
+      agentUaidForApi,
+      uploadJsonToIpfs,
+    ],
+  );
+
+  const openEnsMetadataPreview = useCallback(
+    (target: 'schema' | 'services' | 'registrations' | 'agentUri') => {
+      const parsedChainId = finalChainId ? Number.parseInt(finalChainId, 10) : null;
+      const derivedName = smartAgentEnsName ? deriveEnsAgentNameFromEnsName(smartAgentEnsName) : ensAgentMetadata.name;
+      let title = '';
+      let body = '';
+
+      if (target === 'schema') {
+        title = 'Metadata Schema';
+        body = JSON.stringify(buildEnsAgentSchemaDocument(), null, 2);
+      } else if (target === 'services') {
+        title = 'Services Payload';
+        const payload = parseJsonInput(
+          ensAgentMetadata.servicesPayloadText,
+          buildDefaultEnsAgentServicesPayload({
+            baseUrl: ensAgentMetadata.serviceWeb,
+            webUrl: ensAgentMetadata.serviceWeb,
+            mcpUrl: ensAgentMetadata.serviceMcp,
+            a2aUrl: ensAgentMetadata.serviceA2a,
+            ensName: smartAgentEnsName,
+            agentDid: smartAgentDid ?? undefined,
+          }),
+        );
+        body = JSON.stringify(payload, null, 2);
+      } else if (target === 'registrations') {
+        title = 'Registrations Payload';
+        const payload = parseJsonInput(
+          ensAgentMetadata.registrationsPayloadText,
+          buildDefaultEnsAgentRegistrationsPayload({
+            chainId: parsedChainId,
+            agentId: hasErc8004Extension ? finalAgentId : null,
+            uaid: agentUaidForApi,
+            ensName: smartAgentEnsName,
+            agentDid: smartAgentDid ?? null,
+            agentWallet: displayAgentAddress ?? null,
+          }),
+        );
+        body = JSON.stringify(payload, null, 2);
+      } else {
+        title = 'Agent URI Document';
+        const servicesPayload = parseJsonInput(
+          ensAgentMetadata.servicesPayloadText,
+          buildEnsAgentServicesPayload({
+            webUrl: ensAgentMetadata.serviceWeb,
+            mcpUrl: ensAgentMetadata.serviceMcp,
+            a2aUrl: ensAgentMetadata.serviceA2a,
+            ensName: smartAgentEnsName,
+            agentDid: smartAgentDid ?? undefined,
+          }),
+        );
+        const registrationsPayload = parseJsonInput(
+          ensAgentMetadata.registrationsPayloadText,
+          buildDefaultEnsAgentRegistrationsPayload({
+            chainId: parsedChainId,
+            agentId: hasErc8004Extension ? finalAgentId : null,
+            uaid: agentUaidForApi,
+            ensName: smartAgentEnsName,
+            agentDid: smartAgentDid ?? null,
+            agentWallet: displayAgentAddress ?? null,
+          }),
+        );
+        const payload = parseJsonInput(
+          ensAgentMetadata.agentDocumentText,
+          buildEnsAgentCanonicalPayload({
+            metadata: {
+              class: ensAgentMetadata.class,
+              schema: ensAgentMetadata.schema,
+              agentUri: ensAgentMetadata.agentUri,
+              name: ensAgentMetadata.name || derivedName,
+              description: ensAgentMetadata.description,
+              avatar: ensAgentMetadata.avatar,
+              services: ensAgentMetadata.services,
+              x402Support: ensAgentMetadata.x402Support,
+              active: ensAgentMetadata.active,
+              registrations: ensAgentMetadata.registrations,
+              supportedTrust: ensAgentMetadata.supportedTrust,
+              agentWallet: ensAgentMetadata.agentWallet || displayAgentAddress || '',
+            },
+            servicesPayload,
+            registrationsPayload,
+            agentDid: smartAgentDid ?? undefined,
+            ensName: smartAgentEnsName,
+          }),
+        );
+        body = JSON.stringify(payload, null, 2);
+      }
+
+      setEnsMetadataPreviewDialog({
+        open: true,
+        title,
+        body,
+      });
+    },
+    [
+      finalChainId,
+      smartAgentEnsName,
+      ensAgentMetadata,
+      smartAgentDid,
+      hasErc8004Extension,
+      finalAgentId,
+      agentUaidForApi,
+      displayAgentAddress,
+    ],
+  );
+
   const handleSaveEnsAgentMetadata = useCallback(async () => {
     if (!hasSmartAgentBase || !smartAgentEnsName || !finalChainId) {
       return;
@@ -2696,20 +3012,68 @@ export default function AdminPage() {
           },
           servicesPayload: parseJsonInput(
             ensAgentMetadata.servicesPayloadText,
-            {
-              web: ensAgentMetadata.serviceWeb ? { url: ensAgentMetadata.serviceWeb } : undefined,
-              mcp: ensAgentMetadata.serviceMcp ? { url: ensAgentMetadata.serviceMcp } : undefined,
-              a2a: ensAgentMetadata.serviceA2a ? { url: ensAgentMetadata.serviceA2a } : undefined,
-            },
+            buildEnsAgentServicesPayload({
+              webUrl: ensAgentMetadata.serviceWeb,
+              mcpUrl: ensAgentMetadata.serviceMcp,
+              a2aUrl: ensAgentMetadata.serviceA2a,
+              ensName: smartAgentEnsName,
+              agentDid: smartAgentDid ?? undefined,
+            }),
           ),
           registrationsPayload: parseJsonInput(
             ensAgentMetadata.registrationsPayloadText,
-            ensAgentMetadata.registrations
-              ? [{ system: 'external', id: ensAgentMetadata.registrations, chain: `eip155:${parsedChainId}` }]
-              : [],
+            buildDefaultEnsAgentRegistrationsPayload({
+              chainId: parsedChainId,
+              agentId: hasErc8004Extension ? finalAgentId : null,
+              uaid: agentUaidForApi,
+              ensName: smartAgentEnsName,
+              agentDid: smartAgentDid ?? null,
+              agentWallet: displayAgentAddress ?? null,
+            }),
           ),
-          agentDocument: parseJsonInput(ensAgentMetadata.agentDocumentText, null),
-          autoBuildAgentDocument: ensAgentMetadata.agentDocumentText.trim().length === 0,
+          agentDocument: parseJsonInput(
+            ensAgentMetadata.agentDocumentText,
+            buildEnsAgentCanonicalPayload({
+              metadata: {
+                class: ensAgentMetadata.class,
+                schema: ensAgentMetadata.schema,
+                agentUri: ensAgentMetadata.agentUri,
+                name: ensAgentMetadata.name,
+                description: ensAgentMetadata.description,
+                avatar: ensAgentMetadata.avatar,
+                services: ensAgentMetadata.services,
+                x402Support: ensAgentMetadata.x402Support,
+                active: ensAgentMetadata.active,
+                registrations: ensAgentMetadata.registrations,
+                supportedTrust: ensAgentMetadata.supportedTrust,
+                agentWallet: ensAgentMetadata.agentWallet,
+              },
+              servicesPayload: parseJsonInput(
+                ensAgentMetadata.servicesPayloadText,
+                buildEnsAgentServicesPayload({
+                  webUrl: ensAgentMetadata.serviceWeb,
+                  mcpUrl: ensAgentMetadata.serviceMcp,
+                  a2aUrl: ensAgentMetadata.serviceA2a,
+                  ensName: smartAgentEnsName,
+                  agentDid: smartAgentDid ?? undefined,
+                }),
+              ),
+              registrationsPayload: parseJsonInput(
+                ensAgentMetadata.registrationsPayloadText,
+                buildDefaultEnsAgentRegistrationsPayload({
+                  chainId: parsedChainId,
+                  agentId: hasErc8004Extension ? finalAgentId : null,
+                  uaid: agentUaidForApi,
+                  ensName: smartAgentEnsName,
+                  agentDid: smartAgentDid ?? null,
+                  agentWallet: displayAgentAddress ?? null,
+                }),
+              ),
+              agentDid: smartAgentDid ?? undefined,
+              ensName: smartAgentEnsName,
+            }),
+          ),
+          autoBuildAgentDocument: false,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -4636,6 +5000,29 @@ export default function AdminPage() {
                             <Alert severity="warning">No ENS name is linked to this Smart Agent yet.</Alert>
                           ) : (
                             <>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                <Button size="small" variant="text" onClick={() => void handleApplyEnsDefaults('name')} disabled={ensAgentMetadataLoading || ensAgentMetadataSaving || ensAgentMetadataDefaulting}>
+                                  Default name
+                                </Button>
+                                <Button size="small" variant="text" onClick={() => void handleApplyEnsDefaults('schema')} disabled={ensAgentMetadataLoading || ensAgentMetadataSaving || ensAgentMetadataDefaulting}>
+                                  Build schema URI
+                                </Button>
+                                <Button size="small" variant="text" onClick={() => void handleApplyEnsDefaults('services')} disabled={ensAgentMetadataLoading || ensAgentMetadataSaving || ensAgentMetadataDefaulting}>
+                                  Default services
+                                </Button>
+                                <Button size="small" variant="text" onClick={() => void handleApplyEnsDefaults('registrations')} disabled={ensAgentMetadataLoading || ensAgentMetadataSaving || ensAgentMetadataDefaulting}>
+                                  Default registrations
+                                </Button>
+                                <Button size="small" variant="text" onClick={() => void handleApplyEnsDefaults('agentUri')} disabled={ensAgentMetadataLoading || ensAgentMetadataSaving || ensAgentMetadataDefaulting}>
+                                  Default agent-uri
+                                </Button>
+                                <Button size="small" variant="outlined" onClick={() => void handleApplyEnsDefaults('all')} disabled={ensAgentMetadataLoading || ensAgentMetadataSaving || ensAgentMetadataDefaulting}>
+                                  {ensAgentMetadataDefaulting ? 'Applying defaults…' : 'Default all'}
+                                </Button>
+                              </Box>
+                              <Alert severity="info">
+                                These actions derive values from the ENS name, the ENS `url` record, and `/.well-known/agent-card.json`, then upload canonical payloads to IPFS for `schema`, `services`, `registrations`, and `agent-uri`.
+                              </Alert>
                               <TextField
                                 label="class"
                                 fullWidth
@@ -4654,6 +5041,11 @@ export default function AdminPage() {
                                 helperText="Schema URI for the ENS Agent metadata definition."
                                 size="small"
                               />
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button size="small" variant="outlined" onClick={() => openEnsMetadataPreview('schema')}>
+                                  View metadata schema
+                                </Button>
+                              </Box>
                               <TextField
                                 label="agent-uri"
                                 fullWidth
@@ -4699,6 +5091,11 @@ export default function AdminPage() {
                                 helperText="URI to the services payload. Save can auto-generate this from the service editor below."
                                 size="small"
                               />
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button size="small" variant="outlined" onClick={() => openEnsMetadataPreview('services')}>
+                                  View services payload
+                                </Button>
+                              </Box>
                               <TextField
                                 label="active"
                                 fullWidth
@@ -4726,6 +5123,11 @@ export default function AdminPage() {
                                 helperText="URI to the registrations payload. Save can auto-generate this from the registrations editor below."
                                 size="small"
                               />
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button size="small" variant="outlined" onClick={() => openEnsMetadataPreview('registrations')}>
+                                  View registrations payload
+                                </Button>
+                              </Box>
                               <TextField
                                 label="supported-trust"
                                 fullWidth
@@ -4825,6 +5227,11 @@ export default function AdminPage() {
                                 helperText="Optional full canonical agent document. Leave blank to auto-build from the metadata above and uploaded payload URIs."
                                 size="small"
                               />
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                <Button size="small" variant="outlined" onClick={() => openEnsMetadataPreview('agentUri')}>
+                                  View agent-uri document
+                                </Button>
+                              </Box>
                               <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                                 <Button
                                   variant="outlined"
@@ -6060,6 +6467,33 @@ export default function AdminPage() {
             </Grid>
           </>
         )}
+        <Dialog
+          open={ensMetadataPreviewDialog.open}
+          onClose={() => setEnsMetadataPreviewDialog((prev) => ({ ...prev, open: false }))}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>{ensMetadataPreviewDialog.title}</DialogTitle>
+          <DialogContent dividers>
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {ensMetadataPreviewDialog.body}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEnsMetadataPreviewDialog((prev) => ({ ...prev, open: false }))}>
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </>
   );
