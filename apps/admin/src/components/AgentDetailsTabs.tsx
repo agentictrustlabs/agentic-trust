@@ -1014,6 +1014,18 @@ const AgentDetailsTabs = ({
   }, [agent]);
   const [smartAccountOwnerEoa, setSmartAccountOwnerEoa] = useState<`0x${string}` | null>(smartAccountOwnerHint);
   const [smartAccountOwnerLoading, setSmartAccountOwnerLoading] = useState(false);
+  const principalEoaAddress = useMemo(() => {
+    return (
+      smartAccountOwnerEoa ??
+      extractHexAddress((agent as any)?.eoaAgentIdentityOwnerAccount) ??
+      extractHexAddress((agent as any)?.agentOwnerEOAAccount) ??
+      extractHexAddress((agent as any)?.identityOwnerAccount) ??
+      null
+    );
+  }, [agent, smartAccountOwnerEoa]);
+  const principalSmartAccountAddress = useMemo(() => {
+    return smartAccountAddress ?? extractHexAddress((agent as any)?.identityWalletAccount) ?? null;
+  }, [agent, smartAccountAddress]);
 
   useEffect(() => {
     setSmartAccountOwnerEoa(smartAccountOwnerHint);
@@ -1599,24 +1611,16 @@ const AgentDetailsTabs = ({
                       </div>
                     )}
                     <div>
-                      <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>OwnerAccount</strong>
+                      <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Principal EOA</strong>
                       <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
-                        {(agent as any).identityOwnerAccount || '—'}
+                        {smartAccountOwnerLoading ? 'Loading…' : principalEoaAddress || '—'}
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
-                      <div>
-                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>OperatorAccount</strong>
-                        <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
-                          {(agent as any).identityOperatorAccount || '—'}
-                        </div>
-                      </div>
-                      <div>
-                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>WalletAccount</strong>
-                        <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
-                          {(agent as any).identityWalletAccount || '—'}
-                        </div>
+                    <div>
+                      <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Principal Smart Account</strong>
+                      <div style={{ fontFamily: 'monospace', color: palette.textPrimary, wordBreak: 'break-all', userSelect: 'text' }}>
+                        {principalSmartAccountAddress || '—'}
                       </div>
                     </div>
                   </>

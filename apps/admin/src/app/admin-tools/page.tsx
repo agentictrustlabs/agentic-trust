@@ -800,6 +800,75 @@ export default function AdminPage() {
   const isSmartAgentMode = Boolean(hasSmartAgentBase && !hasErc8004Extension);
   const isHybridSmartAgentMode = Boolean(hasSmartAgentBase && hasErc8004Extension);
 
+  const identity8004 = useMemo(() => {
+    const identities = Array.isArray((fetchedAgentInfo as any)?.identities) ? ((fetchedAgentInfo as any).identities as any[]) : [];
+    return identities.find((identity) => String(identity?.kind || '').toLowerCase() === '8004') ?? null;
+  }, [fetchedAgentInfo]);
+
+  const principalSmartAccount = useMemo(() => {
+    const from8004Identity =
+      resolvePlainAddress(identity8004?.ownerAccount?.address) ??
+      resolvePlainAddress((fetchedAgentInfo as any)?.agentIdentityOwnerAccount) ??
+      resolvePlainAddress((fetchedAgentInfo as any)?.identityOwnerAccount);
+    if (from8004Identity) return from8004Identity;
+
+    return (
+      resolvePlainAddress((fetchedAgentInfo as any)?.smartAgentAccount) ??
+      resolvePlainAddress((fetchedAgentInfo as any)?.didAccount) ??
+      smartAgentIdentity?.address ??
+      displayAgentAddress ??
+      null
+    );
+  }, [identity8004, fetchedAgentInfo, smartAgentIdentity, displayAgentAddress]);
+
+  const principalEoaFrom8004 = useMemo(() => {
+    return (
+      resolvePlainAddress(identity8004?.ownerEOAAccount?.address) ??
+      resolvePlainAddress((fetchedAgentInfo as any)?.eoaAgentIdentityOwnerAccount) ??
+      resolvePlainAddress((fetchedAgentInfo as any)?.agentOwnerEOAAccount) ??
+      null
+    );
+  }, [identity8004, fetchedAgentInfo]);
+
+  const [resolvedPrincipalEoaFromEns, setResolvedPrincipalEoaFromEns] = useState<`0x${string}` | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (principalEoaFrom8004) {
+      setResolvedPrincipalEoaFromEns(null);
+      return;
+    }
+    if (!smartAgentDid) {
+      setResolvedPrincipalEoaFromEns(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const response = await fetch(`/api/accounts/owner/by-account/${encodeURIComponent(smartAgentDid)}`, {
+          cache: 'no-store',
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          if (!cancelled) setResolvedPrincipalEoaFromEns(null);
+          return;
+        }
+        const owner = resolvePlainAddress((data as any)?.owner);
+        if (!cancelled) {
+          setResolvedPrincipalEoaFromEns(owner);
+        }
+      } catch {
+        if (!cancelled) setResolvedPrincipalEoaFromEns(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [smartAgentDid, principalEoaFrom8004]);
+
+  const principalEoa = principalEoaFrom8004 ?? resolvedPrincipalEoaFromEns ?? null;
+
   const derivedEnsNameForATP = useMemo(() => {
     const fromDetails = fetchedAgentInfo && typeof (fetchedAgentInfo as any).didName === 'string'
       ? String((fetchedAgentInfo as any).didName).trim()
@@ -4445,6 +4514,17 @@ export default function AdminPage() {
                     {smartAgentEnsName && (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         ENS: <Box component="span" fontFamily="monospace">{smartAgentEnsName}</Box>
+                      </Typography>
+                    )}
+                    {principalEoa && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        Principal EOA: <Box component="span" fontFamily="monospace">{principalEoa}</Box>
+                      </Typography>
+                    )}
+                    {principalSmartAccount && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        Principal Smart Account:{' '}
+                        <Box component="span" fontFamily="monospace">{principalSmartAccount}</Box>
                       </Typography>
                     )}
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
