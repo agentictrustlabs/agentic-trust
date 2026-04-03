@@ -11,7 +11,8 @@ import { Header } from '@/components/Header';
 import { useAuth } from '@/components/AuthProvider';
 import type { Address, Chain } from 'viem';
 import { keccak256, toHex, getAddress, createPublicClient, http } from 'viem';
-import { buildDid8004, parseDid8004, generateSessionPackage, getDeployedAccountClientByAddress, getDeployedAccountClientByAgentName, updateAgentRegistrationWithWallet, requestNameValidationWithWallet, requestAccountValidationWithWallet, requestAppValidationWithWallet, requestAIDValidationWithWallet } from '@agentic-trust/core';
+import { buildDid8004, parseDid8004, generateSessionPackage, generateSmartAgentDelegationSessionPackage, getDeployedAccountClientByAddress, getDeployedAccountClientByAgentName, updateAgentRegistrationWithWallet, requestNameValidationWithWallet, requestAccountValidationWithWallet, requestAppValidationWithWallet, requestAIDValidationWithWallet } from '@agentic-trust/core';
+import { sendSponsoredUserOperation, waitForUserOperationReceipt } from '@agentic-trust/core/client';
 import type { DiscoverParams as AgentSearchParams, DiscoverResponse, ValidationStatus } from '@agentic-trust/core/server';
 import {
   getSupportedChainIds,
@@ -43,6 +44,29 @@ function resolvePlainAddress(value: unknown): `0x${string}` | null {
   }
   if (v.startsWith('0x')) return getAddress(v) as `0x${string}`;
   return null;
+}
+
+function parseDidEthr(raw: unknown): { chainId: number; address: `0x${string}` } | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  const match = /^did:ethr:(\d+):(0x[a-fA-F0-9]{40})$/.exec(value);
+  if (!match) return null;
+  const chainId = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(chainId)) return null;
+  try {
+    return { chainId, address: getAddress(match[2]) as `0x${string}` };
+  } catch {
+    return null;
+  }
+}
+
+function extractDidTargetFromUaid(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value.startsWith('uaid:did:')) return null;
+  const afterPrefix = value.slice('uaid:did:'.length);
+  const idPart = (afterPrefix.split(';')[0] ?? '').trim();
+  return idPart ? `did:${idPart}` : null;
 }
 
 function extractProtocolEndpoints(registration: any): {
@@ -80,6 +104,90 @@ function extractProtocolEndpoints(registration: any): {
     mcpEndpoint: mcp && typeof (mcp as any).endpoint === 'string' ? String((mcp as any).endpoint) : '',
     a2aSkills,
     a2aDomains,
+  };
+}
+
+type EnsAgentMetadataForm = {
+  class: string;
+  schema: string;
+  agentUri: string;
+  name: string;
+  description: string;
+  avatar: string;
+  services: string;
+  active: string;
+  x402Support: string;
+  registrations: string;
+  supportedTrust: string[];
+  agentWallet: string;
+  serviceWeb: string;
+  serviceMcp: string;
+  serviceA2a: string;
+  servicesPayloadText: string;
+  registrationsPayloadText: string;
+  agentDocumentText: string;
+};
+
+const EMPTY_ENS_AGENT_METADATA: EnsAgentMetadataForm = {
+  class: 'Agent',
+  schema: '',
+  agentUri: '',
+  name: '',
+  description: '',
+  avatar: '',
+  services: '',
+  active: '',
+  x402Support: '',
+  registrations: '',
+  supportedTrust: [],
+  agentWallet: '',
+  serviceWeb: '',
+  serviceMcp: '',
+  serviceA2a: '',
+  servicesPayloadText: '',
+  registrationsPayloadText: '',
+  agentDocumentText: '',
+};
+
+function normalizeLineList(value: string): string[] {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseJsonInput<T>(value: string, fallback: T): T {
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return JSON.parse(trimmed) as T;
+}
+
+function buildEnsMetadataFormFromResponse(structured: any): EnsAgentMetadataForm {
+  const servicesPayload = structured?.payloads?.services;
+  const registrationsPayload = structured?.payloads?.registrations;
+  const agentDocument = structured?.payloads?.agentDocument;
+  const webUrl = typeof servicesPayload?.web?.url === 'string' ? servicesPayload.web.url : '';
+  const mcpUrl = typeof servicesPayload?.mcp?.url === 'string' ? servicesPayload.mcp.url : '';
+  const a2aUrl = typeof servicesPayload?.a2a?.url === 'string' ? servicesPayload.a2a.url : '';
+  return {
+    class: typeof structured?.class === 'string' && structured.class.trim() ? structured.class : 'Agent',
+    schema: typeof structured?.schema === 'string' ? structured.schema : '',
+    agentUri: typeof structured?.agentUri === 'string' ? structured.agentUri : '',
+    name: typeof structured?.name === 'string' ? structured.name : '',
+    description: typeof structured?.description === 'string' ? structured.description : '',
+    avatar: typeof structured?.avatar === 'string' ? structured.avatar : '',
+    services: typeof structured?.services === 'string' ? structured.services : '',
+    active: typeof structured?.active === 'string' ? structured.active : '',
+    x402Support: typeof structured?.x402Support === 'string' ? structured.x402Support : '',
+    registrations: typeof structured?.registrations === 'string' ? structured.registrations : '',
+    supportedTrust: Array.isArray(structured?.supportedTrust) ? structured.supportedTrust.map(String).filter(Boolean) : [],
+    agentWallet: typeof structured?.agentWallet === 'string' ? structured.agentWallet : '',
+    serviceWeb: webUrl,
+    serviceMcp: mcpUrl,
+    serviceA2a: a2aUrl,
+    servicesPayloadText: servicesPayload ? JSON.stringify(servicesPayload, null, 2) : '',
+    registrationsPayloadText: registrationsPayload ? JSON.stringify(registrationsPayload, null, 2) : '',
+    agentDocumentText: agentDocument ? JSON.stringify(agentDocument, null, 2) : '',
   };
 }
 
@@ -572,13 +680,13 @@ export default function AdminPage() {
           throw new Error(`Failed to resolve UAID (HTTP ${resp.status})`);
         }
         const details = await resp.json();
-        const didIdentity =
-          typeof details?.didIdentity === 'string' ? details.didIdentity : null;
-        if (!didIdentity || !didIdentity.startsWith('did:8004:')) {
-          throw new Error('UAID does not resolve to a did:8004 identity (on-chain admin tools unavailable)');
+        const didIdentity = typeof details?.didIdentity === 'string' ? details.didIdentity : null;
+        if (didIdentity && didIdentity.startsWith('did:8004:')) {
+          const parsed = parseDid8004(didIdentity);
+          if (!cancelled) setParsedDidFromSource(parsed);
+        } else if (!cancelled) {
+          setParsedDidFromSource(null);
         }
-        const parsed = parseDid8004(didIdentity);
-        if (!cancelled) setParsedDidFromSource(parsed);
       } catch (error) {
         console.error('Failed to resolve agent identifier:', error);
         if (!cancelled) setParsedDidFromSource(null);
@@ -602,16 +710,34 @@ export default function AdminPage() {
     return null;
   }, [canonicalUaid, didSource]);
 
+  const smartAgentDidFromUaid = useMemo(() => {
+    const targetDid = extractDidTargetFromUaid(agentUaidForApi);
+    const parsed = parseDidEthr(targetDid);
+    return parsed ? targetDid : null;
+  }, [agentUaidForApi]);
+
+  // State for fetched agent info (name, address, etc) when navigating via DID
+  const [fetchedAgentInfo, setFetchedAgentInfo] = useState<Record<string, any> | null>(null);
+
+  const smartAgentDidFromDetails = useMemo(() => {
+    const didIdentity =
+      fetchedAgentInfo && typeof (fetchedAgentInfo as any).didIdentity === 'string'
+        ? String((fetchedAgentInfo as any).didIdentity).trim()
+        : '';
+    return parseDidEthr(didIdentity) ? didIdentity : null;
+  }, [fetchedAgentInfo]);
+
+  const smartAgentDid = smartAgentDidFromDetails ?? smartAgentDidFromUaid;
+  const smartAgentIdentity = useMemo(() => parseDidEthr(smartAgentDid), [smartAgentDid]);
+
   // Use parsed DID or fall back to query params
   const effectiveAgentId = parsedDidFromSource?.agentId?.toString() ?? queryAgentId;
   const effectiveChainId = parsedDidFromSource?.chainId?.toString() ?? queryChainId;
-  
+
   // Update queryAgentId/queryChainId to use effective values for backward compatibility
   const finalAgentId = effectiveAgentId ?? queryAgentId;
-  const finalChainId = effectiveChainId ?? queryChainId;
-  
-  // State for fetched agent info (name, address, etc) when navigating via DID
-  const [fetchedAgentInfo, setFetchedAgentInfo] = useState<Record<string, any> | null>(null);
+  const finalChainId =
+    effectiveChainId ?? (smartAgentIdentity ? String(smartAgentIdentity.chainId) : null) ?? queryChainId;
 
   // Fetch agent info if we have ID/Chain but missing details (e.g. via DID route)
   useEffect(() => {
@@ -631,22 +757,62 @@ export default function AdminPage() {
     }
   }, [isEditMode, agentUaidForApi, queryAgentAddress, searchParams]);
 
+  const fetchedDidAccount =
+    fetchedAgentInfo && typeof (fetchedAgentInfo as any).didAccount === 'string'
+      ? resolvePlainAddress((fetchedAgentInfo as any).didAccount)
+      : null;
+  const fetchedSmartAgentAccount =
+    fetchedAgentInfo && typeof (fetchedAgentInfo as any).smartAgentAccount === 'string'
+      ? resolvePlainAddress((fetchedAgentInfo as any).smartAgentAccount)
+      : null;
+  const displayAgentAddress =
+    queryAgentAddress ??
+    resolvePlainAddress(fetchedAgentInfo?.agentAccount) ??
+    fetchedSmartAgentAccount ??
+    fetchedDidAccount ??
+    smartAgentIdentity?.address ??
+    null;
   // Use the explicitly-provided agent name (no normalization/slugification).
-  const displayAgentName = searchParams?.get('agentName') ?? fetchedAgentInfo?.agentName ?? '...';
-  const displayAgentAddress = queryAgentAddress ?? fetchedAgentInfo?.agentAccount ?? null;
+  const displayAgentName =
+    searchParams?.get('agentName') ??
+    fetchedAgentInfo?.agentName ??
+    fetchedAgentInfo?.didName ??
+    '...';
+  const smartAgentEnsName = useMemo(() => {
+    const fromDetails =
+      fetchedAgentInfo && typeof (fetchedAgentInfo as any).didName === 'string'
+        ? String((fetchedAgentInfo as any).didName).trim().toLowerCase()
+        : '';
+    if (fromDetails && !fromDetails.startsWith('uaid:')) return fromDetails;
+    const fromSearch = String(searchParams?.get('ensName') || '').trim().toLowerCase();
+    if (fromSearch && !fromSearch.startsWith('uaid:')) return fromSearch.endsWith('.eth') ? fromSearch : `${fromSearch}.eth`;
+    const fromDisplay = String(displayAgentName || '').trim().toLowerCase();
+    if (fromDisplay.endsWith('.eth')) return fromDisplay;
+    return '';
+  }, [fetchedAgentInfo, searchParams, displayAgentName]);
+  const hasErc8004Extension = Boolean(finalAgentId && finalChainId);
+  const hasSmartAgentBase = Boolean(
+    isEditMode &&
+      finalChainId &&
+      displayAgentAddress &&
+      (smartAgentEnsName || smartAgentIdentity || agentUaidForApi?.startsWith('uaid:did:ethr:')),
+  );
+  const isSmartAgentMode = Boolean(hasSmartAgentBase && !hasErc8004Extension);
+  const isHybridSmartAgentMode = Boolean(hasSmartAgentBase && hasErc8004Extension);
 
   const derivedEnsNameForATP = useMemo(() => {
     const fromDetails = fetchedAgentInfo && typeof (fetchedAgentInfo as any).didName === 'string'
       ? String((fetchedAgentInfo as any).didName).trim()
       : '';
     if (fromDetails) return fromDetails;
+    if (smartAgentDid && !hasErc8004Extension) return '';
     // Fallback: derive from displayAgentName if it looks like a label.
     const base = String(displayAgentName || '').trim().toLowerCase();
     if (!base) return '';
     if (base.endsWith('.8004-agent.eth')) return base;
     if (/^[a-z0-9-]{1,63}$/.test(base)) return `${base}.8004-agent.eth`;
     return '';
-  }, [fetchedAgentInfo, displayAgentName]);
+  }, [fetchedAgentInfo, displayAgentName, smartAgentDid, hasErc8004Extension]);
 
   const derivedSubdomainType = useMemo((): 'agents-atp' | 'atp' | 'tenant' => {
     const ens = derivedEnsNameForATP.toLowerCase();
@@ -692,7 +858,7 @@ export default function AdminPage() {
       }
     }
   }, [queryTab, activeManagementTab]);
- 
+
   const handleGenerateSessionPackage = useCallback(
     async () => {
       if (!isEditMode || !finalAgentId || !finalChainId || !displayAgentAddress) {
@@ -1027,6 +1193,122 @@ export default function AdminPage() {
     ],
   );
 
+  const handleGenerateSmartAgentSessionPackage = useCallback(
+    async () => {
+      if (!isEditMode || !isSmartAgentMode || !finalChainId || !displayAgentAddress) {
+        return;
+      }
+
+      try {
+        setSessionPackageError(null);
+        setSessionPackageLoading(true);
+        setSessionPackageText(null);
+        setSessionPackageProgress(5);
+
+        if (!eip1193Provider || !headerAddress) {
+          throw new Error('Wallet not connected. Connect a wallet to generate a session package.');
+        }
+
+        const parsedChainId = Number.parseInt(finalChainId, 10);
+        if (!Number.isFinite(parsedChainId)) {
+          throw new Error('Invalid chainId for Smart Agent.');
+        }
+
+        const chainEnv = getClientChainEnv(parsedChainId);
+        if (!chainEnv.rpcUrl) {
+          throw new Error(
+            'Missing RPC URL configuration for this chain. Set NEXT_PUBLIC_AGENTIC_TRUST_RPC_URL_* env vars.',
+          );
+        }
+        if (!chainEnv.bundlerUrl) {
+          throw new Error(
+            'Missing bundler URL configuration for this chain. Set NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_* env vars.',
+          );
+        }
+        if (!chainEnv.validationRegistry) {
+          throw new Error(
+            'Missing ValidationRegistry address. Set NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_* env vars.',
+          );
+        }
+        if (!chainEnv.associationsProxy) {
+          throw new Error(
+            'Missing AssociationsStore proxy. Set NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_* env vars.',
+          );
+        }
+
+        const agentAccountPlain = resolvePlainAddress(displayAgentAddress);
+        if (!agentAccountPlain) {
+          throw new Error(
+            `Invalid smart agent account address (expected 0x...): ${displayAgentAddress}`,
+          );
+        }
+
+        setSessionPackageProgress(20);
+        const pkg = await generateSmartAgentDelegationSessionPackage({
+          chainId: parsedChainId,
+          agentAccount: agentAccountPlain as `0x${string}`,
+          provider: eip1193Provider,
+          ownerAddress: headerAddress as `0x${string}`,
+          rpcUrl: chainEnv.rpcUrl,
+          bundlerUrl: chainEnv.bundlerUrl,
+          validationRegistry: chainEnv.validationRegistry,
+          associationsProxy: chainEnv.associationsProxy,
+          did: smartAgentDid ?? undefined,
+          uaid: agentUaidForApi ?? undefined,
+          ensName: derivedEnsNameForATP || undefined,
+        });
+
+        setSessionPackageProgress(70);
+        setSessionPackageText(JSON.stringify(pkg, null, 2));
+
+        try {
+          const { syncAgentToATP } = await import('@/lib/a2a-client');
+          const agentNameForATP = displayAgentName === '...' ? '' : String(displayAgentName || '');
+          const syncResult = await syncAgentToATP(
+            agentNameForATP,
+            displayAgentAddress as string,
+            pkg,
+            {
+              ensName: derivedEnsNameForATP || undefined,
+              chainId: parsedChainId,
+            },
+          );
+
+          if (!syncResult.success) {
+            console.warn('[Smart Agent Session Package] Failed to sync agent to ATP:', syncResult.error);
+          }
+        } catch (syncError) {
+          console.error('[Smart Agent Session Package] Error syncing agent to ATP:', syncError);
+        }
+
+        setSessionPackageProgress(100);
+        setTimeout(() => {
+          setSessionPackageLoading(false);
+          setSessionPackageProgress(0);
+        }, 500);
+      } catch (error: any) {
+        console.error('Error creating smart-agent session package (admin-tools):', error);
+        setSessionPackageError(
+          error?.message ?? 'Failed to create Smart Agent session package. Please try again.',
+        );
+        setSessionPackageLoading(false);
+        setSessionPackageProgress(0);
+      }
+    },
+    [
+      isEditMode,
+      isSmartAgentMode,
+      finalChainId,
+      displayAgentAddress,
+      eip1193Provider,
+      headerAddress,
+      smartAgentDid,
+      agentUaidForApi,
+      derivedEnsNameForATP,
+      displayAgentName,
+    ],
+  );
+
   const refreshAgentValidationRequests = useCallback(async () => {
     // Parse chain ID from finalChainId if available, otherwise fallback
     const effectiveParsedChainId = finalChainId ? Number.parseInt(finalChainId, 10) : null;
@@ -1191,6 +1473,11 @@ export default function AdminPage() {
   const [registrationImageError, setRegistrationImageError] = useState<string | null>(null);
   const [registrationA2aError, setRegistrationA2aError] = useState<string | null>(null);
   const [registrationMcpError, setRegistrationMcpError] = useState<string | null>(null);
+  const [ensAgentMetadata, setEnsAgentMetadata] = useState<EnsAgentMetadataForm>(EMPTY_ENS_AGENT_METADATA);
+  const [ensAgentMetadataLoading, setEnsAgentMetadataLoading] = useState(false);
+  const [ensAgentMetadataSaving, setEnsAgentMetadataSaving] = useState(false);
+  const [ensAgentMetadataError, setEnsAgentMetadataError] = useState<string | null>(null);
+  const [ensAgentMetadataSuccess, setEnsAgentMetadataSuccess] = useState<string | null>(null);
   
   // OASF Skills and Domains for A2A protocol
   const [registrationA2aSkills, setRegistrationA2aSkills] = useState<string[]>([]);
@@ -1209,7 +1496,23 @@ export default function AdminPage() {
   const [agentCardDomainsCount, setAgentCardDomainsCount] = useState<number | null>(null);
   
   // Tab state for Agent Info pane
-  const [agentInfoTab, setAgentInfoTab] = useState<'name' | 'info' | 'taxonomy' | 'protocols'>('name');
+  const [agentInfoTab, setAgentInfoTab] = useState<string>('overview');
+
+  useEffect(() => {
+    if (!hasErc8004Extension) {
+      if (
+        activeManagementTab === 'transfer' ||
+        activeManagementTab === 'validators' ||
+        activeManagementTab === 'agentValidation' ||
+        activeManagementTab === 'delete'
+      ) {
+        setActiveManagementTab('registration');
+      }
+      if (agentInfoTab === 'info' || agentInfoTab === 'taxonomy' || agentInfoTab === 'protocols') {
+        setAgentInfoTab(hasSmartAgentBase ? 'ensMetadata' : 'overview');
+      }
+    }
+  }, [hasErc8004Extension, hasSmartAgentBase, activeManagementTab, agentInfoTab]);
 
   // Load OASF skills and domains from API
   useEffect(() => {
@@ -2282,6 +2585,190 @@ export default function AdminPage() {
       displayAgentName,
     ],
   );
+
+  const loadEnsAgentMetadata = useCallback(async () => {
+    if (!hasSmartAgentBase || !smartAgentEnsName || !finalChainId) {
+      setEnsAgentMetadata(EMPTY_ENS_AGENT_METADATA);
+      return;
+    }
+
+    try {
+      setEnsAgentMetadataLoading(true);
+      setEnsAgentMetadataError(null);
+      setEnsAgentMetadataSuccess(null);
+
+      const parsedChainId = Number.parseInt(finalChainId, 10);
+      if (!Number.isFinite(parsedChainId)) {
+        throw new Error('Invalid chainId in URL.');
+      }
+
+      const response = await fetch(
+        `/api/ens/agent-metadata?ensName=${encodeURIComponent(smartAgentEnsName)}&chainId=${parsedChainId}`,
+        { cache: 'no-store' },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !(data as any)?.ok) {
+        throw new Error((data as any)?.error || 'Failed to load ENS metadata.');
+      }
+
+      setEnsAgentMetadata(
+        buildEnsMetadataFormFromResponse({
+          ...(data as any).structured,
+          payloads: (data as any).payloads,
+        }),
+      );
+    } catch (error: any) {
+      setEnsAgentMetadataError(error?.message || 'Failed to load ENS metadata.');
+    } finally {
+      setEnsAgentMetadataLoading(false);
+    }
+  }, [hasSmartAgentBase, smartAgentEnsName, finalChainId]);
+
+  useEffect(() => {
+    if (hasSmartAgentBase && smartAgentEnsName && finalChainId) {
+      void loadEnsAgentMetadata();
+    }
+  }, [hasSmartAgentBase, smartAgentEnsName, finalChainId, loadEnsAgentMetadata]);
+
+  const handleSaveEnsAgentMetadata = useCallback(async () => {
+    if (!hasSmartAgentBase || !smartAgentEnsName || !finalChainId) {
+      return;
+    }
+    if (!eip1193Provider || !headerAddress) {
+      setEnsAgentMetadataError('Wallet not connected. Connect your wallet to update ENS metadata.');
+      return;
+    }
+
+    try {
+      setEnsAgentMetadataSaving(true);
+      setEnsAgentMetadataError(null);
+      setEnsAgentMetadataSuccess(null);
+
+      const parsedChainId = Number.parseInt(finalChainId, 10);
+      if (!Number.isFinite(parsedChainId)) {
+        throw new Error('Invalid chainId in URL.');
+      }
+
+      const chain = getChainById(parsedChainId) as Chain;
+      const bundlerUrl = getClientBundlerUrl(parsedChainId);
+      if (!bundlerUrl) {
+        throw new Error(
+          'Missing bundler URL configuration for this chain. Set NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_* env vars.',
+        );
+      }
+
+      if (eip1193Provider && typeof (eip1193Provider as any).request === 'function') {
+        const targetHex = `0x${parsedChainId.toString(16)}`;
+        try {
+          await (eip1193Provider as any).request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: targetHex }],
+          });
+        } catch {
+          throw new Error(`Please switch your wallet to chain ${parsedChainId} and retry.`);
+        }
+      }
+
+      const accountAddress = resolvePlainAddress(displayAgentAddress);
+      if (!accountAddress) {
+        throw new Error('Smart Agent account address is missing or invalid.');
+      }
+
+      const response = await fetch('/api/ens/agent-metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ensName: smartAgentEnsName,
+          chainId: parsedChainId,
+          metadata: {
+            class: ensAgentMetadata.class,
+            schema: ensAgentMetadata.schema,
+            agentUri: ensAgentMetadata.agentUri,
+            name: ensAgentMetadata.name,
+            description: ensAgentMetadata.description,
+            avatar: ensAgentMetadata.avatar,
+            services: ensAgentMetadata.services,
+            x402Support: ensAgentMetadata.x402Support,
+            active: ensAgentMetadata.active,
+            registrations: ensAgentMetadata.registrations,
+            supportedTrust: ensAgentMetadata.supportedTrust,
+            agentWallet: ensAgentMetadata.agentWallet,
+          },
+          servicesPayload: parseJsonInput(
+            ensAgentMetadata.servicesPayloadText,
+            {
+              web: ensAgentMetadata.serviceWeb ? { url: ensAgentMetadata.serviceWeb } : undefined,
+              mcp: ensAgentMetadata.serviceMcp ? { url: ensAgentMetadata.serviceMcp } : undefined,
+              a2a: ensAgentMetadata.serviceA2a ? { url: ensAgentMetadata.serviceA2a } : undefined,
+            },
+          ),
+          registrationsPayload: parseJsonInput(
+            ensAgentMetadata.registrationsPayloadText,
+            ensAgentMetadata.registrations
+              ? [{ system: 'external', id: ensAgentMetadata.registrations, chain: `eip155:${parsedChainId}` }]
+              : [],
+          ),
+          agentDocument: parseJsonInput(ensAgentMetadata.agentDocumentText, null),
+          autoBuildAgentDocument: ensAgentMetadata.agentDocumentText.trim().length === 0,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !(data as any)?.ok) {
+        throw new Error((data as any)?.error || 'Failed to prepare ENS metadata calls.');
+      }
+
+      const accountClient = await getDeployedAccountClientByAddress(
+        accountAddress,
+        headerAddress as `0x${string}`,
+        { chain, ethereumProvider: eip1193Provider },
+      );
+
+      const calls = Array.isArray((data as any)?.calls)
+        ? (data as any).calls
+            .map((call: any) => {
+              if (!call?.to || !call?.data) return null;
+              let value: bigint | undefined;
+              if (call.value !== null && call.value !== undefined && String(call.value) !== '') {
+                try {
+                  value = BigInt(call.value);
+                } catch {
+                  value = undefined;
+                }
+              }
+              return { to: call.to, data: call.data, value };
+            })
+            .filter(Boolean)
+        : [];
+
+      if (!calls.length) {
+        throw new Error('No ENS text-record updates were generated.');
+      }
+
+      const uoHash = await sendSponsoredUserOperation({
+        bundlerUrl,
+        chain,
+        accountClient,
+        calls: calls as Array<{ to: `0x${string}`; data: `0x${string}`; value?: bigint }>,
+      });
+      await waitForUserOperationReceipt({ bundlerUrl, chain, hash: uoHash });
+
+      setEnsAgentMetadataSuccess(`ENS metadata saved for ${smartAgentEnsName}.`);
+      await loadEnsAgentMetadata();
+    } catch (error: any) {
+      setEnsAgentMetadataError(error?.message || 'Failed to save ENS metadata.');
+    } finally {
+      setEnsAgentMetadataSaving(false);
+    }
+  }, [
+    hasSmartAgentBase,
+    smartAgentEnsName,
+    finalChainId,
+    eip1193Provider,
+    headerAddress,
+    displayAgentAddress,
+    ensAgentMetadata,
+    loadEnsAgentMetadata,
+  ]);
 
   const handleSetAgentActive = async (
     nextActive: boolean,
@@ -3572,12 +4059,16 @@ export default function AdminPage() {
               </Alert>
             )}
 
-            {isEditMode && finalAgentId && finalChainId && (
+            {isEditMode && finalChainId && (displayAgentAddress || finalAgentId) && (
               <Paper sx={{ mb: 3, p: 3, bgcolor: 'grey.50' }}>
                 <Grid container spacing={2} alignItems="center">
                   <Grid item xs={12} md={8}>
                     <Typography variant="h5" fontWeight="bold" color="text.primary">
-                      Manage Agent #{finalAgentId} (chain {finalChainId})
+                      {isHybridSmartAgentMode
+                        ? `Manage Smart Agent + 8004 Extension (chain ${finalChainId})`
+                        : hasSmartAgentBase
+                          ? `Manage Smart Agent (chain ${finalChainId})`
+                          : `Manage Agent #${finalAgentId} (chain ${finalChainId})`}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                       Name: <strong>{displayAgentName}</strong>
@@ -3585,6 +4076,26 @@ export default function AdminPage() {
                     {displayAgentAddress && (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                         Account: <Box component="span" fontFamily="monospace">{displayAgentAddress}</Box>
+                      </Typography>
+                    )}
+                    {smartAgentEnsName && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        ENS: <Box component="span" fontFamily="monospace">{smartAgentEnsName}</Box>
+                      </Typography>
+                    )}
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      Identity model:{' '}
+                      <strong>
+                        {isHybridSmartAgentMode
+                          ? 'Smart Agent base + ERC-8004 extension'
+                          : hasSmartAgentBase
+                            ? 'Smart Agent base'
+                            : 'ERC-8004 identity'}
+                      </strong>
+                    </Typography>
+                    {agentUaidForApi && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        UAID: <Box component="span" fontFamily="monospace">{agentUaidForApi}</Box>
                       </Typography>
                     )}
                   </Grid>
@@ -3614,13 +4125,13 @@ export default function AdminPage() {
                         },
                       }}
                     >
-                      <Tab label="Agent Info" value="registration" />
-                      <Tab label="Agent Operator" value="session" />
+                      <Tab label="Overview & Metadata" value="registration" />
+                      <Tab label="Operator Sessions" value="session" />
                       <Tab label="Agent Skills" value="skills" />
-                      <Tab label="Transfer Agent" value="transfer" />
-                      <Tab label="Delete Agent" value="delete" />
-                      <Tab label="Validators" value="validators" />
-                      <Tab label="View Requests for Validation" value="agentValidation" />
+                      {hasErc8004Extension && <Tab label="8004 Transfer" value="transfer" />}
+                      {hasErc8004Extension && <Tab label="Delete 8004 Agent" value="delete" />}
+                      {hasErc8004Extension && <Tab label="8004 Validators" value="validators" />}
+                      {hasErc8004Extension && <Tab label="8004 Validation Requests" value="agentValidation" />}
                     </Tabs>
                   </Paper>
                 </Grid>
@@ -3631,7 +4142,7 @@ export default function AdminPage() {
                 {(!isEditMode || activeManagementTab === 'registration') && (
                   <Paper sx={{ p: 3 }}>
                     <Typography variant="h5" gutterBottom>
-                      Agent Info
+                      Agent Overview
                     </Typography>
 
                     {registrationPreviewError && (
@@ -3645,6 +4156,15 @@ export default function AdminPage() {
                       </Alert>
                     )}
 
+                    {hasSmartAgentBase && (
+                      <Alert severity="info" sx={{ mt: 1, mb: 2 }}>
+                        Smart Agent base metadata is managed on the ENS name using the Agent-class text-record schema.
+                        {hasErc8004Extension
+                          ? ' The 8004 registration remains available below as an extension.'
+                          : ' This agent does not currently have an 8004 extension.'}
+                      </Alert>
+                    )}
+
                     {/* Agent Info Tabs */}
                     <Box sx={{ mt: 2 }}>
                       <Tabs
@@ -3652,27 +4172,70 @@ export default function AdminPage() {
                         onChange={(_, newValue) => setAgentInfoTab(newValue)}
                         sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
                       >
-                        <Tab label="Name" value="name" />
-                        <Tab label="Info" value="info" />
-                        <Tab label="Taxonomy" value="taxonomy" />
-                        <Tab label="Protocols" value="protocols" />
+                        <Tab label="Overview" value="overview" />
+                        {hasSmartAgentBase && <Tab label="ENS Metadata" value="ensMetadata" />}
+                        {hasErc8004Extension && <Tab label="8004 Info" value="info" />}
+                        {hasErc8004Extension && <Tab label="8004 Taxonomy" value="taxonomy" />}
+                        {hasErc8004Extension && <Tab label="8004 Protocols" value="protocols" />}
                       </Tabs>
 
-                      {/* Name Tab */}
-                      {agentInfoTab === 'name' && (
+                      {/* Overview Tab */}
+                      {agentInfoTab === 'overview' && (
                         <Box sx={{ mt: 3 }}>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Agent name is set during registration and cannot be changed.
-                          </Typography>
-                          <TextField
-                            label="Agent Name"
-                            fullWidth
-                            value={displayAgentName}
-                            disabled
-                            variant="outlined"
-                            size="small"
-                            helperText="This field is read-only. The agent name is part of the agent identity and cannot be modified."
-                          />
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <TextField
+                              label="Agent Name"
+                              fullWidth
+                              value={displayAgentName}
+                              disabled
+                              variant="outlined"
+                              size="small"
+                            />
+                            {smartAgentEnsName && (
+                              <TextField
+                                label="ENS Name"
+                                fullWidth
+                                value={smartAgentEnsName}
+                                disabled
+                                variant="outlined"
+                                size="small"
+                              />
+                            )}
+                            {displayAgentAddress && (
+                              <TextField
+                                label="Smart Account"
+                                fullWidth
+                                value={displayAgentAddress}
+                                disabled
+                                variant="outlined"
+                                size="small"
+                              />
+                            )}
+                            {agentUaidForApi && (
+                              <TextField
+                                label="UAID"
+                                fullWidth
+                                value={agentUaidForApi}
+                                disabled
+                                variant="outlined"
+                                size="small"
+                              />
+                            )}
+                            <TextField
+                              label="Identity Model"
+                              fullWidth
+                              value={
+                                isHybridSmartAgentMode
+                                  ? 'Smart Agent base + ERC-8004 extension'
+                                  : hasSmartAgentBase
+                                    ? 'Smart Agent base'
+                                    : 'ERC-8004 identity'
+                              }
+                              disabled
+                              variant="outlined"
+                              size="small"
+                            />
+                          </Box>
                         </Box>
                       )}
 
@@ -4065,8 +4628,226 @@ export default function AdminPage() {
                         );
                       })()}
 
-                      {/* Save Button */}
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 4, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                      {agentInfoTab === 'ensMetadata' && (
+                        <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {ensAgentMetadataError && <Alert severity="error">{ensAgentMetadataError}</Alert>}
+                          {ensAgentMetadataSuccess && <Alert severity="success">{ensAgentMetadataSuccess}</Alert>}
+                          {!smartAgentEnsName ? (
+                            <Alert severity="warning">No ENS name is linked to this Smart Agent yet.</Alert>
+                          ) : (
+                            <>
+                              <TextField
+                                label="class"
+                                fullWidth
+                                value={ensAgentMetadata.class}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, class: e.target.value }))}
+                                helperText='Use "Agent" for the Agent-class metadata schema.'
+                                size="small"
+                              />
+                              <TextField
+                                label="schema"
+                                fullWidth
+                                value={ensAgentMetadata.schema}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, schema: e.target.value }))}
+                                helperText="Schema URI for the ENS Agent metadata definition."
+                                size="small"
+                              />
+                              <TextField
+                                label="agent-uri"
+                                fullWidth
+                                value={ensAgentMetadata.agentUri}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, agentUri: e.target.value }))}
+                                helperText="Canonical registration document URI. Save will auto-upload a fresh payload unless you provide a custom agent document below."
+                                size="small"
+                              />
+                              <TextField
+                                label="name"
+                                fullWidth
+                                value={ensAgentMetadata.name}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, name: e.target.value }))}
+                                helperText="Schema-native display name for the Agent node."
+                                size="small"
+                              />
+                              <TextField
+                                label="description"
+                                fullWidth
+                                multiline
+                                rows={4}
+                                value={ensAgentMetadata.description}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, description: e.target.value }))}
+                                size="small"
+                              />
+                              <TextField
+                                label="avatar"
+                                fullWidth
+                                value={ensAgentMetadata.avatar}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, avatar: e.target.value }))}
+                                size="small"
+                              />
+                              <TextField
+                                label="services"
+                                fullWidth
+                                value={ensAgentMetadata.services}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, services: e.target.value }))}
+                                helperText="URI to the services payload. Save can auto-generate this from the service editor below."
+                                size="small"
+                              />
+                              <TextField
+                                label="active"
+                                fullWidth
+                                value={ensAgentMetadata.active}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, active: e.target.value }))}
+                                helperText='Text value, typically "true" or "false".'
+                                size="small"
+                              />
+                              <TextField
+                                label="x402-support"
+                                fullWidth
+                                value={ensAgentMetadata.x402Support}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, x402Support: e.target.value }))}
+                                helperText='Text value, typically "true" or "false".'
+                                size="small"
+                              />
+                              <TextField
+                                label="registrations"
+                                fullWidth
+                                value={ensAgentMetadata.registrations}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, registrations: e.target.value }))}
+                                helperText="URI to the registrations payload. Save can auto-generate this from the registrations editor below."
+                                size="small"
+                              />
+                              <TextField
+                                label="supported-trust"
+                                fullWidth
+                                multiline
+                                minRows={2}
+                                value={ensAgentMetadata.supportedTrust.join('\n')}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) =>
+                                  setEnsAgentMetadata((prev) => ({
+                                    ...prev,
+                                    supportedTrust: normalizeLineList(e.target.value),
+                                  }))
+                                }
+                                helperText="Short trust labels stored on the ENS record. One per line."
+                                size="small"
+                              />
+                              <TextField
+                                label="agent-wallet"
+                                fullWidth
+                                value={ensAgentMetadata.agentWallet}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, agentWallet: e.target.value }))}
+                                size="small"
+                              />
+                              <Alert severity="info">
+                                `services` and `registrations` are canonical payload URIs in the Agent schema. The editors below let you manage those payloads while keeping the ENS text records compact.
+                              </Alert>
+                              <TextField
+                                label="services payload: web URL"
+                                fullWidth
+                                value={ensAgentMetadata.serviceWeb}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, serviceWeb: e.target.value }))}
+                                size="small"
+                              />
+                              <TextField
+                                label="services payload: mcp URL"
+                                fullWidth
+                                value={ensAgentMetadata.serviceMcp}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, serviceMcp: e.target.value }))}
+                                size="small"
+                              />
+                              <TextField
+                                label="services payload: a2a URL"
+                                fullWidth
+                                value={ensAgentMetadata.serviceA2a}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) => setEnsAgentMetadata((prev) => ({ ...prev, serviceA2a: e.target.value }))}
+                                size="small"
+                              />
+                              <TextField
+                                label="services payload JSON"
+                                fullWidth
+                                multiline
+                                minRows={6}
+                                value={ensAgentMetadata.servicesPayloadText}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) =>
+                                  setEnsAgentMetadata((prev) => ({
+                                    ...prev,
+                                    servicesPayloadText: e.target.value,
+                                  }))
+                                }
+                                helperText="Optional full JSON payload. Leave blank to generate from the URL fields above."
+                                size="small"
+                              />
+                              <TextField
+                                label="registrations payload JSON"
+                                fullWidth
+                                multiline
+                                minRows={6}
+                                value={ensAgentMetadata.registrationsPayloadText}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) =>
+                                  setEnsAgentMetadata((prev) => ({
+                                    ...prev,
+                                    registrationsPayloadText: e.target.value,
+                                  }))
+                                }
+                                helperText="Array payload for cross-chain or cross-registry registrations."
+                                size="small"
+                              />
+                              <TextField
+                                label="agent-uri document JSON"
+                                fullWidth
+                                multiline
+                                minRows={8}
+                                value={ensAgentMetadata.agentDocumentText}
+                                disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                onChange={(e) =>
+                                  setEnsAgentMetadata((prev) => ({
+                                    ...prev,
+                                    agentDocumentText: e.target.value,
+                                  }))
+                                }
+                                helperText="Optional full canonical agent document. Leave blank to auto-build from the metadata above and uploaded payload URIs."
+                                size="small"
+                              />
+                              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                                <Button
+                                  variant="outlined"
+                                  onClick={() => void loadEnsAgentMetadata()}
+                                  disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                >
+                                  {ensAgentMetadataLoading ? 'Refreshing…' : 'Refresh ENS metadata'}
+                                </Button>
+                                <Button
+                                  variant="contained"
+                                  onClick={() => void handleSaveEnsAgentMetadata()}
+                                  disabled={ensAgentMetadataLoading || ensAgentMetadataSaving}
+                                >
+                                  {ensAgentMetadataSaving ? 'Saving…' : 'Save ENS metadata'}
+                                </Button>
+                              </Box>
+                            </>
+                          )}
+                        </Box>
+                      )}
+
+                      {hasErc8004Extension && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 4, pt: 2, borderTop: 1, borderColor: 'divider' }}>
                         <Button
                           variant="outlined"
                           onClick={async () => {
@@ -4194,13 +4975,14 @@ export default function AdminPage() {
                             {registrationEditSaving ? 'Saving…' : 'Save All Changes'}
                           </Button>
                         </Box>
-                      </Box>
+                      )}
+                    </Box>
                   </Paper>
                 )}
                 {(!isEditMode || activeManagementTab === 'delete') && (
                   <Paper sx={{ p: 3 }}>
                     <Typography variant="h5" gutterBottom color="text.primary">
-                      Delete Agent
+                      Delete 8004 Agent
                     </Typography>
                     <Box component="form" onSubmit={handleDeleteAgent} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <TextField
@@ -4234,7 +5016,7 @@ export default function AdminPage() {
                           fontWeight: 'bold'
                         }}
                       >
-                        Delete Agent
+                        Delete 8004 Agent
                       </Button>
                     </Box>
                   </Paper>
@@ -4353,85 +5135,93 @@ export default function AdminPage() {
                 {(!isEditMode || activeManagementTab === 'session') && (
                   <Paper sx={{ p: 3 }}>
                     <Typography variant="h5" gutterBottom>
-                      Agent Operator
+                      {isSmartAgentMode ? 'Smart Agent Operator' : 'Agent Operator'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" paragraph>
-                      The Agent Operator is a delegation from the Agent Owner to an operator that allows the agent app to interact with the Reputation Registry and Validation Registry. A session package contains the operator session keys and delegation information that enables this functionality.
+                      {isSmartAgentMode
+                        ? 'The Smart Agent Operator creates a delegation-based operator session from the principal wallet and principal smart account. The stored session package contains the session EOA, session smart account, and signed delegation without relying on an ERC-8004 NFT operator.'
+                        : 'The Agent Operator is a delegation from the Agent Owner to an operator that allows the agent app to interact with the Reputation Registry and Validation Registry. A session package contains the operator session keys and delegation information that enables this functionality.'}
                     </Typography>
                       <>
-                    <Box 
-                      sx={{ 
-                        mb: 2, 
-                        p: 2, 
-                        borderRadius: 1, 
-                        bgcolor: 'grey.50', 
-                        border: 1, 
-                        borderColor: 'grey.300',
-                        opacity: (nftOperator.loading || registrationPreviewLoading) ? 0.5 : 1,
-                        pointerEvents: (nftOperator.loading || registrationPreviewLoading) ? 'none' : 'auto',
-                        position: 'relative',
-                      }}
-                    >
-                      {(nftOperator.loading || registrationPreviewLoading) && (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            bgcolor: 'rgba(255, 255, 255, 0.8)',
-                            zIndex: 1,
-                          }}
-                        >
-                          <CircularProgress size={24} />
+                    {!isSmartAgentMode ? (
+                      <Box 
+                        sx={{ 
+                          mb: 2, 
+                          p: 2, 
+                          borderRadius: 1, 
+                          bgcolor: 'grey.50', 
+                          border: 1, 
+                          borderColor: 'grey.300',
+                          opacity: (nftOperator.loading || registrationPreviewLoading) ? 0.5 : 1,
+                          pointerEvents: (nftOperator.loading || registrationPreviewLoading) ? 'none' : 'auto',
+                          position: 'relative',
+                        }}
+                      >
+                        {(nftOperator.loading || registrationPreviewLoading) && (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              bgcolor: 'rgba(255, 255, 255, 0.8)',
+                              zIndex: 1,
+                            }}
+                          >
+                            <CircularProgress size={24} />
+                          </Box>
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              Agent Active
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Activation is controlled by the registration JSON (`tokenUri`). To activate, an operator must be set on the NFT.
+                            </Typography>
+                          </Box>
+                          <Switch
+                            checked={Boolean((registrationParsed as any)?.active)}
+                            onChange={(_, checked) => {
+                              void handleSetAgentActive(checked);
+                            }}
+                            disabled={activeToggleSaving || sessionPackageLoading || !registrationPreviewText || nftOperator.loading || registrationPreviewLoading}
+                            inputProps={{ 'aria-label': 'Agent active toggle' }}
+                          />
                         </Box>
-                      )}
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                            Agent Active
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Activation is controlled by the registration JSON (`tokenUri`). To activate, an operator must be set on the NFT.
-                          </Typography>
-                        </Box>
-                        <Switch
-                          checked={Boolean((registrationParsed as any)?.active)}
-                          onChange={(_, checked) => {
-                            void handleSetAgentActive(checked);
-                          }}
-                          disabled={activeToggleSaving || sessionPackageLoading || !registrationPreviewText || nftOperator.loading || registrationPreviewLoading}
-                          inputProps={{ 'aria-label': 'Agent active toggle' }}
-                        />
+
+                        {!nftOperator.loading && !registrationPreviewLoading && nftOperator.operatorAddress && (
+                          <Box sx={{ mt: 1 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              <strong>Operator Address:</strong>{' '}
+                              <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                                {nftOperator.operatorAddress}
+                              </Box>
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {!nftOperator.loading && !registrationPreviewLoading && !nftOperator.operatorAddress && (
+                          <Alert severity="warning" sx={{ mt: 1 }}>
+                            Cannot activate until an Operator is assigned to the NFT. Click "Set Operator Session Keys and Delegation" below.
+                          </Alert>
+                        )}
+
+                        {activeToggleError && (
+                          <Alert severity="error" sx={{ mt: 1 }}>
+                            {activeToggleError}
+                          </Alert>
+                        )}
                       </Box>
-
-                      {!nftOperator.loading && !registrationPreviewLoading && nftOperator.operatorAddress && (
-                        <Box sx={{ mt: 1 }}>
-                          <Typography variant="body2" color="text.secondary">
-                            <strong>Operator Address:</strong>{' '}
-                            <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                              {nftOperator.operatorAddress}
-                            </Box>
-                          </Typography>
-                        </Box>
-                      )}
-
-                      {!nftOperator.loading && !registrationPreviewLoading && !nftOperator.operatorAddress && (
-                        <Alert severity="warning" sx={{ mt: 1 }}>
-                          Cannot activate until an Operator is assigned to the NFT. Click "Set Operator Session Keys and Delegation" below.
-                        </Alert>
-                      )}
-
-                      {activeToggleError && (
-                        <Alert severity="error" sx={{ mt: 1 }}>
-                          {activeToggleError}
-                        </Alert>
-                      )}
-                    </Box>
+                    ) : (
+                      <Alert severity="info" sx={{ mb: 2 }}>
+                        Smart Agents do not require an ERC-8004 NFT operator. This flow creates a delegation session from the principal smart account and linked ENS identity only.
+                      </Alert>
+                    )}
 
                     <Button
                       variant="contained"
@@ -4439,7 +5229,11 @@ export default function AdminPage() {
                       disabled={sessionPackageLoading}
                       sx={{ mb: 2 }}
                     >
-                      {sessionPackageLoading ? 'Setting Operator Session Keys…' : 'Set Operator Session Keys and Delegation'}
+                      {sessionPackageLoading
+                        ? (isSmartAgentMode ? 'Setting Smart Agent Session Keys…' : 'Setting Operator Session Keys…')
+                        : (isSmartAgentMode
+                            ? 'Set Smart Agent Session Keys and Delegation'
+                            : 'Set Operator Session Keys and Delegation')}
                     </Button>
 
                     {sessionPackageLoading && (
@@ -4510,13 +5304,19 @@ export default function AdminPage() {
                       open={sessionPackageConfirmOpen}
                       onClose={() => setSessionPackageConfirmOpen(false)}
                     >
-                      <DialogTitle>Confirm Operator Session Keys Change</DialogTitle>
+                      <DialogTitle>
+                        {isSmartAgentMode ? 'Confirm Smart Agent Session Keys Change' : 'Confirm Operator Session Keys Change'}
+                      </DialogTitle>
                       <DialogContent>
                         <Typography variant="body1" paragraph>
-                          Are you sure you want to set new Operator Session Keys and Delegation?
+                          {isSmartAgentMode
+                            ? 'Are you sure you want to set new Smart Agent session keys and delegation?'
+                            : 'Are you sure you want to set new Operator Session Keys and Delegation?'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          This will create a new session package with new operator session keys. The previous operator session keys will be replaced. This action allows the agent app to interact with the Reputation Registry and Validation Registry.
+                          {isSmartAgentMode
+                            ? 'This will create a new smart-agent delegation package with a fresh session EOA, session smart account, and signed delegation tied to the principal smart account and ENS-backed identity.'
+                            : 'This will create a new session package with new operator session keys. The previous operator session keys will be replaced. This action allows the agent app to interact with the Reputation Registry and Validation Registry.'}
                         </Typography>
                       </DialogContent>
                       <DialogActions>
@@ -4526,7 +5326,11 @@ export default function AdminPage() {
                         <Button
                           onClick={() => {
                             setSessionPackageConfirmOpen(false);
-                            handleGenerateSessionPackage();
+                            if (isSmartAgentMode) {
+                              handleGenerateSmartAgentSessionPackage();
+                            } else {
+                              handleGenerateSessionPackage();
+                            }
                           }}
                           variant="contained"
                           autoFocus
@@ -4541,7 +5345,7 @@ export default function AdminPage() {
         {(!isEditMode || activeManagementTab === 'transfer') && (
           <Paper sx={{ p: 3 }}>
             <Typography variant="h5" gutterBottom>
-              Transfer Agent
+              Transfer 8004 Agent
             </Typography>
             <Box component="form" onSubmit={handleTransferAgent} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
@@ -4587,7 +5391,7 @@ export default function AdminPage() {
                   fontWeight: 'bold'
               }}
             >
-              Transfer Agent
+              Transfer 8004 Agent
               </Button>
             </Box>
           </Paper>
@@ -4595,7 +5399,7 @@ export default function AdminPage() {
                 {(!isEditMode || activeManagementTab === 'agentValidation') && (
                   <Paper sx={{ p: 3 }}>
                     <Typography variant="h5" gutterBottom>
-                      Validate Agent Requests
+                      8004 Validation Requests
                     </Typography>
                     {isEditMode && displayAgentAddress && finalChainId ? (
                       <>
@@ -4765,7 +5569,7 @@ export default function AdminPage() {
                   <Paper sx={{ p: 3 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                       <Typography variant="h5" gutterBottom>
-                        Validators
+                        8004 Validators
                       </Typography>
                       <FormControl variant="outlined" sx={{ minWidth: 250 }}>
                         <InputLabel>Validation Type</InputLabel>

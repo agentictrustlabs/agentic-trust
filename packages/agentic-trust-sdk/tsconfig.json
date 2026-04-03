@@ -15,6 +15,7 @@
   },
   "include": [
     "*.ts",
+    "*.d.ts",
     "utils/**/*.ts",
     "abis/**/*.json"
   ],

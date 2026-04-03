@@ -303,6 +303,12 @@ importers:
       '@agentic-trust/8092-sdk':
         specifier: workspace:*
         version: link:../erc8092-sdk
+      '@ensdomains/ensjs':
+        specifier: ^3.0.0
+        version: 3.7.0(typescript@5.9.3)(viem@2.42.0)
+      '@ensmetadata/sdk':
+        specifier: ^0.2.0
+        version: 0.2.0(typescript@5.9.3)
       '@metamask/smart-accounts-kit':
         specifier: ^0.1.0
         version: 0.1.0(viem@2.42.0)
@@ -1276,6 +1282,14 @@ packages:
       '@scure/base': 1.2.6
     dev: false
 
+  /@ensdomains/address-encoder@1.1.3:
+    resolution: {integrity: sha512-QS4ax0YkA8tsbQcWgBNmLLtb3aG0jsOQtED9SRyX9Ixflt1jDMuC/0i3ONMnNJNG5HTIko0Te4Y1JIGXjNcnUg==}
+    dependencies:
+      '@noble/curves': 1.9.7
+      '@noble/hashes': 1.8.0
+      '@scure/base': 1.2.6
+    dev: false
+
   /@ensdomains/address-encoder@1.1.4:
     resolution: {integrity: sha512-hBY6VxVw9A1cMPOKDIvPB2nlmgaw2dvrrj/p/9tkGWmD+qdfKYZTdZuSdFcUGxhhzEB4HeLG/a98ytlTq84KcA==}
     dependencies:
@@ -1299,6 +1313,15 @@ packages:
       '@ensdomains/address-encoder': 1.0.0-rc.3
       '@noble/curves': 1.9.7
       '@scure/base': 1.2.6
+    dev: false
+
+  /@ensdomains/dnsprovejs@0.5.1:
+    resolution: {integrity: sha512-nfm4ggpK5YBVwVwLZKF9WPjRGRTL9aUxX2O4pqv/AnQCz3WeGHsW7VhVFLj2s4EoWSzCXwR1E6nuqgUwnH692w==}
+    engines: {node: '>=16.8'}
+    dependencies:
+      '@noble/hashes': 1.8.0
+      dns-packet: 5.6.1
+      typescript-logging: 1.0.1
     dev: false
 
   /@ensdomains/dnsprovejs@0.5.2:
@@ -1329,6 +1352,40 @@ packages:
     transitivePeerDependencies:
       - encoding
       - typescript
+      - zod
+    dev: false
+
+  /@ensdomains/ensjs@4.2.2(typescript@5.9.3)(viem@2.23.15):
+    resolution: {integrity: sha512-nnnceOb1sWYNp9UrSVXjV8tXuT9OzoRhRZz8S69vYlbVkFBoHKn1Cme+SC618iJH9xu8Ia2XsB3CDlzR1ejlHQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      viem: ^2.9.2
+    dependencies:
+      '@adraffy/ens-normalize': 1.10.1
+      '@ensdomains/address-encoder': 1.1.3
+      '@ensdomains/content-hash': 3.1.0-rc.1
+      '@ensdomains/dnsprovejs': 0.5.1
+      abitype: 1.2.2(typescript@5.9.3)(zod@4.3.4)
+      dns-packet: 5.6.1
+      graphql: 16.12.0
+      graphql-request: 7.1.2(graphql@16.12.0)
+      pako: 2.1.0
+      ts-pattern: 5.9.0
+      viem: 2.23.15(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+      - zod
+    dev: false
+
+  /@ensmetadata/sdk@0.2.0(typescript@5.9.3):
+    resolution: {integrity: sha512-qV2E1fj5pg/SynS3mFKOxPYhLlhgTij9AXmfDFmi5JS541ifFtwfZbA99jUQkz8FCrEbbz5RsAmbYRfbX60d3A==}
+    dependencies:
+      '@ensdomains/ensjs': 4.2.2(typescript@5.9.3)(viem@2.23.15)
+      viem: 2.23.15(typescript@5.9.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
       - zod
     dev: false
 
@@ -6146,6 +6203,23 @@ packages:
       nullthrows: 1.1.1
       react: 18.3.1
       react-native: 0.83.1(@babel/core@7.28.5)(@types/react@18.3.27)(react@18.3.1)
+    dev: false
+
+  /@react-native/virtualized-lists@0.83.1(react-native@0.83.1)(react@19.2.4):
+    resolution: {integrity: sha512-MdmoAbQUTOdicCocm5XAFDJWsswxk7hxa6ALnm6Y88p01HFML0W593hAn6qOt9q6IM1KbAcebtH6oOd4gcQy8w==}
+    engines: {node: '>= 20.19.4'}
+    peerDependencies:
+      '@types/react': ^19.2.0
+      react: '*'
+      react-native: '*'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+    dependencies:
+      invariant: 2.2.4
+      nullthrows: 1.1.1
+      react: 19.2.4
+      react-native: 0.83.1(@babel/core@7.28.5)(react@19.2.4)
     dev: false
 
   /@reduxjs/toolkit@2.11.2(react-redux@9.2.0)(react@18.3.1):
@@ -16352,6 +16426,15 @@ packages:
       - encoding
     dev: false
 
+  /graphql-request@7.1.2(graphql@16.12.0):
+    resolution: {integrity: sha512-+XE3iuC55C2di5ZUrB4pjgwe+nIQBuXVIK9J98wrVwojzDW3GMdSBZfxUk8l4j9TieIpjpggclxhNEU9ebGF8w==}
+    peerDependencies:
+      graphql: 14 - 16
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.12.0)
+      graphql: 16.12.0
+    dev: false
+
   /graphql@16.12.0:
     resolution: {integrity: sha512-DKKrynuQRne0PNpEbzuEdHlYOMksHSUI8Zc9Unei5gTsMNA2/vMpoMz/yKba50pejK56qj98qM0SjYxAKi13gQ==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
@@ -17428,6 +17511,14 @@ packages:
       ws: '*'
     dependencies:
       ws: 8.18.0
+    dev: false
+
+  /isows@1.0.6(ws@8.18.1):
+    resolution: {integrity: sha512-lPHCayd40oW98/I0uvgaHKWCSvkzY27LjWLbtzOm64yQ+G3Q5npjjbdppU65iZXkK1Zt+kH9pfegli0AYfwYYw==}
+    peerDependencies:
+      ws: '*'
+    dependencies:
+      ws: 8.18.1
     dev: false
 
   /isows@1.0.7(ws@8.18.3):
@@ -19782,7 +19873,6 @@ packages:
     transitivePeerDependencies:
       - zod
     dev: false
-    optional: true
 
   /ox@0.6.9(typescript@5.9.3)(zod@3.25.76):
     resolution: {integrity: sha512-wi5ShvzE4eOcTwQVsIPdFr+8ycyX+5le/96iAJutaZAvCes1J0+RvpEPg5QDPDiaR0XQQAvZVl7AwqQcINuUug==}
@@ -20907,7 +20997,7 @@ packages:
       react-native: '>=0.56'
     dependencies:
       fast-base64-decode: 1.0.0
-      react-native: 0.83.1(@babel/core@7.28.5)(@types/react@18.3.27)(react@18.3.1)
+      react-native: 0.83.1(@babel/core@7.28.5)(react@19.2.4)
     dev: false
 
   /react-native@0.83.1(@babel/core@7.28.5)(@types/react@18.3.27)(react@18.3.1):
@@ -20949,6 +21039,62 @@ packages:
       pretty-format: 29.7.0
       promise: 8.3.0
       react: 18.3.1
+      react-devtools-core: 6.1.5
+      react-refresh: 0.14.2
+      regenerator-runtime: 0.13.11
+      scheduler: 0.27.0
+      semver: 7.7.3
+      stacktrace-parser: 0.1.11
+      whatwg-fetch: 3.6.20
+      ws: 7.5.10
+      yargs: 17.7.2
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@react-native-community/cli'
+      - '@react-native/metro-config'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+    dev: false
+
+  /react-native@0.83.1(@babel/core@7.28.5)(react@19.2.4):
+    resolution: {integrity: sha512-mL1q5HPq5cWseVhWRLl+Fwvi5z1UO+3vGOpjr+sHFwcUletPRZ5Kv+d0tUfqHmvi73/53NjlQqX1Pyn4GguUfA==}
+    engines: {node: '>= 20.19.4'}
+    hasBin: true
+    peerDependencies:
+      '@types/react': ^19.1.1
+      react: ^19.2.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+    dependencies:
+      '@jest/create-cache-key-function': 29.7.0
+      '@react-native/assets-registry': 0.83.1
+      '@react-native/codegen': 0.83.1(@babel/core@7.28.5)
+      '@react-native/community-cli-plugin': 0.83.1
+      '@react-native/gradle-plugin': 0.83.1
+      '@react-native/js-polyfills': 0.83.1
+      '@react-native/normalize-colors': 0.83.1
+      '@react-native/virtualized-lists': 0.83.1(react-native@0.83.1)(react@19.2.4)
+      abort-controller: 3.0.0
+      anser: 1.4.10
+      ansi-regex: 5.0.1
+      babel-jest: 29.7.0(@babel/core@7.28.5)
+      babel-plugin-syntax-hermes-parser: 0.32.0
+      base64-js: 1.5.1
+      commander: 12.1.0
+      flow-enums-runtime: 0.0.6
+      glob: 7.2.3
+      hermes-compiler: 0.14.0
+      invariant: 2.2.4
+      jest-environment-node: 29.7.0
+      memoize-one: 5.2.1
+      metro-runtime: 0.83.3
+      metro-source-map: 0.83.3
+      nullthrows: 1.1.1
+      pretty-format: 29.7.0
+      promise: 8.3.0
+      react: 19.2.4
       react-devtools-core: 6.1.5
       react-refresh: 0.14.2
       regenerator-runtime: 0.13.11
@@ -21022,6 +21168,11 @@ packages:
     engines: {node: '>=0.10.0'}
     dependencies:
       loose-envify: 1.4.0
+
+  /react@19.2.4:
+    resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
+    engines: {node: '>=0.10.0'}
+    dev: false
 
   /read-pkg-up@7.0.1:
     resolution: {integrity: sha512-zK0TB7Xd6JpCLmlLmufqykGE+/TlOePD6qKClNW7hHDKFh/J7/7gCWGR7joEQEW1bKq3a3yUZSObOoWLFQ4ohg==}
@@ -22626,6 +22777,10 @@ packages:
       yn: 3.1.1
     dev: false
 
+  /ts-pattern@5.9.0:
+    resolution: {integrity: sha512-6s5V71mX8qBUmlgbrfL33xDUwO0fq48rxAu2LBE11WBeGdpCPOsXksQbZJHvHwhrd3QjUusd3mAOM5Gg0mFBLg==}
+    dev: false
+
   /ts-typed-events@3.0.0:
     resolution: {integrity: sha512-+2FZ0XPX+UPR7PO8ZQjuvnuDMYRhzrDaCRaNHaBG1xSL//0oPa3XMU5yxgDTzW67VzkE33fQpx1YxWBdkaF7Zw==}
     dev: false
@@ -23369,6 +23524,29 @@ packages:
       d3-shape: 3.2.0
       d3-time: 3.1.0
       d3-timer: 3.0.1
+    dev: false
+
+  /viem@2.23.15(typescript@5.9.3):
+    resolution: {integrity: sha512-2t9lROkSzj/ciEZ08NqAHZ6c+J1wKLwJ4qpUxcHdVHcLBt6GfO9+ycuZycTT05ckfJ6TbwnMXMa3bMonvhtUMw==}
+    peerDependencies:
+      typescript: '>=5.0.4'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+    dependencies:
+      '@noble/curves': 1.8.1
+      '@noble/hashes': 1.7.1
+      '@scure/bip32': 1.6.2
+      '@scure/bip39': 1.5.4
+      abitype: 1.0.8(typescript@5.9.3)(zod@3.25.76)
+      isows: 1.0.6(ws@8.18.1)
+      ox: 0.6.9(typescript@5.9.3)
+      typescript: 5.9.3
+      ws: 8.18.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
     dev: false
 
   /viem@2.23.2(typescript@5.9.3)(zod@3.25.76):
@@ -24331,6 +24509,19 @@ packages:
         optional: true
       utf-8-validate:
         optional: true
+
+  /ws@8.18.1:
+    resolution: {integrity: sha512-RKW2aJZMXeMxVpnZ6bck+RswznaxmzdULiBr6KY7XkTnW8uvt0iT9H5DkHUChXrc+uurzwa0rVI16n/Xzjdz1w==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+    dev: false
 
   /ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10):
     resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}

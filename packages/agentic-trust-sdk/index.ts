@@ -30,6 +30,25 @@ export {
 } from './AIAgentDiscoveryClient';
 export { graphQLSchemaString, buildGraphQLSchema } from './schema';
 export { graphQLSchemaStringKb, buildGraphQLSchemaKb } from './schemaKb';
+export {
+  ENS_AGENT_CLASS,
+  ENS_AGENT_SCHEMA_VERSION,
+  ENS_AGENT_METADATA_KEYS,
+  buildEnsAgentCanonicalPayload,
+  buildEnsAgentMetadataRecords,
+  buildEnsAgentServicesPayload,
+  computeEnsAgentMetadataDelta,
+  parseEnsAgentMetadataRecords,
+  parseStringArray,
+  readEnsAgentMetadata,
+  serializeSupportedTrust,
+  type EnsAgentCanonicalPayload,
+  type EnsAgentMetadataKey,
+  type EnsAgentMetadataRecord,
+  type EnsAgentRegistrationEntry,
+  type EnsAgentServiceEndpoint,
+  type EnsAgentServicesPayload,
+} from './ENSAgentMetadataClient';
 
 // Re-export AccountProvider types from @agentic-trust/8004-sdk for convenience
 export type {

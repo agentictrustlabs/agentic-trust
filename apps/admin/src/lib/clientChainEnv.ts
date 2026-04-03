@@ -13,6 +13,7 @@ type ClientChainEnv = {
   identityRegistry?: `0x${string}`;
   reputationRegistry?: `0x${string}`;
   validationRegistry?: `0x${string}`;
+  associationsProxy?: `0x${string}`;
 };
 
 const DEFAULT_CHAIN_ENV: ClientChainEnv = {
@@ -21,6 +22,7 @@ const DEFAULT_CHAIN_ENV: ClientChainEnv = {
   identityRegistry: process.env.NEXT_PUBLIC_AGENTIC_TRUST_IDENTITY_REGISTRY as `0x${string}` | undefined,
   reputationRegistry: process.env.NEXT_PUBLIC_AGENTIC_TRUST_REPUTATION_REGISTRY as `0x${string}` | undefined,
   validationRegistry: process.env.NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY as `0x${string}` | undefined,
+  associationsProxy: process.env.NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY as `0x${string}` | undefined,
 };
 
 const CHAIN_SPECIFIC_ENV: Record<number, ClientChainEnv> = {
@@ -33,6 +35,8 @@ const CHAIN_SPECIFIC_ENV: Record<number, ClientChainEnv> = {
       DEFAULT_CHAIN_ENV.reputationRegistry) as `0x${string}` | undefined,
     validationRegistry: (process.env.NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_SEPOLIA ??
       DEFAULT_CHAIN_ENV.validationRegistry) as `0x${string}` | undefined,
+    associationsProxy: (process.env.NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_SEPOLIA ??
+      DEFAULT_CHAIN_ENV.associationsProxy) as `0x${string}` | undefined,
   },
   84532: {
     bundlerUrl: process.env.NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_BASE_SEPOLIA ?? DEFAULT_CHAIN_ENV.bundlerUrl,
@@ -43,6 +47,8 @@ const CHAIN_SPECIFIC_ENV: Record<number, ClientChainEnv> = {
       DEFAULT_CHAIN_ENV.reputationRegistry) as `0x${string}` | undefined,
     validationRegistry: (process.env.NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_BASE_SEPOLIA ??
       DEFAULT_CHAIN_ENV.validationRegistry) as `0x${string}` | undefined,
+    associationsProxy: (process.env.NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_BASE_SEPOLIA ??
+      DEFAULT_CHAIN_ENV.associationsProxy) as `0x${string}` | undefined,
   },
   11155420: {
     bundlerUrl: process.env.NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_OPTIMISM_SEPOLIA ?? DEFAULT_CHAIN_ENV.bundlerUrl,
@@ -53,6 +59,8 @@ const CHAIN_SPECIFIC_ENV: Record<number, ClientChainEnv> = {
       DEFAULT_CHAIN_ENV.reputationRegistry) as `0x${string}` | undefined,
     validationRegistry: (process.env.NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_OPTIMISM_SEPOLIA ??
       DEFAULT_CHAIN_ENV.validationRegistry) as `0x${string}` | undefined,
+    associationsProxy: (process.env.NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_OPTIMISM_SEPOLIA ??
+      DEFAULT_CHAIN_ENV.associationsProxy) as `0x${string}` | undefined,
   },
   59144: {
     bundlerUrl: process.env.NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_LINEA ?? DEFAULT_CHAIN_ENV.bundlerUrl,
@@ -63,6 +71,8 @@ const CHAIN_SPECIFIC_ENV: Record<number, ClientChainEnv> = {
       DEFAULT_CHAIN_ENV.reputationRegistry) as `0x${string}` | undefined,
     validationRegistry: (process.env.NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_LINEA ??
       DEFAULT_CHAIN_ENV.validationRegistry) as `0x${string}` | undefined,
+    associationsProxy: (process.env.NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_LINEA ??
+      DEFAULT_CHAIN_ENV.associationsProxy) as `0x${string}` | undefined,
   },
   59141: {
     bundlerUrl: process.env.NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_LINEA_SEPOLIA ?? DEFAULT_CHAIN_ENV.bundlerUrl,
@@ -73,6 +83,8 @@ const CHAIN_SPECIFIC_ENV: Record<number, ClientChainEnv> = {
       DEFAULT_CHAIN_ENV.reputationRegistry) as `0x${string}` | undefined,
     validationRegistry: (process.env.NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_LINEA_SEPOLIA ??
       DEFAULT_CHAIN_ENV.validationRegistry) as `0x${string}` | undefined,
+    associationsProxy: (process.env.NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_LINEA_SEPOLIA ??
+      DEFAULT_CHAIN_ENV.associationsProxy) as `0x${string}` | undefined,
   },
 };
 
@@ -95,8 +107,9 @@ export function getClientRegistryAddresses(chainId: number): {
   identityRegistry?: `0x${string}`;
   reputationRegistry?: `0x${string}`;
   validationRegistry?: `0x${string}`;
+  associationsProxy?: `0x${string}`;
 } {
-  const { identityRegistry, reputationRegistry, validationRegistry } = getClientChainEnv(chainId);
-  return { identityRegistry, reputationRegistry, validationRegistry };
+  const { identityRegistry, reputationRegistry, validationRegistry, associationsProxy } = getClientChainEnv(chainId);
+  return { identityRegistry, reputationRegistry, validationRegistry, associationsProxy };
 }
 

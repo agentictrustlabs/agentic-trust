@@ -13,7 +13,23 @@ export {
   AIAgentIdentityClient,
   AIAgentReputationClient,
   OrgIdentityClient,
+  ENS_AGENT_CLASS,
+  ENS_AGENT_SCHEMA_VERSION,
+  ENS_AGENT_METADATA_KEYS,
+  buildEnsAgentCanonicalPayload,
+  buildEnsAgentMetadataRecords,
+  buildEnsAgentServicesPayload,
+  computeEnsAgentMetadataDelta,
+  parseEnsAgentMetadataRecords,
+  parseStringArray,
+  readEnsAgentMetadata,
   type GiveFeedbackParams,
+  type EnsAgentCanonicalPayload,
+  type EnsAgentMetadataKey,
+  type EnsAgentMetadataRecord,
+  type EnsAgentRegistrationEntry,
+  type EnsAgentServiceEndpoint,
+  type EnsAgentServicesPayload,
 } from '@agentic-trust/agentic-trust-sdk';
 
 // Export AccountProvider types from erc8004-sdk for convenience
@@ -101,9 +117,42 @@ export type {
 
 export type { ApiClientConfig } from './server/lib/types';
 
-export type { SessionPackage } from './shared/sessionPackage';
+export type {
+  AnySessionPackage,
+  A2AOnlySessionPackage,
+  DelegationSessionPackage,
+  SessionPackage,
+  SmartAgentDelegationSessionPackage,
+} from './shared/sessionPackage';
+export {
+  isA2AOnlySessionPackage,
+  isDelegationSessionPackage,
+  isErc8004SessionPackage,
+  isSessionPackageReadyForChat,
+  isSessionPackageReadyForOnchain,
+  isSmartAgentDelegationSessionPackage,
+} from './shared/sessionPackageGating';
 
-export { generateSessionPackage } from './client/sessionPackageBuilder';
+export { generateA2AOnlySessionPackage } from './client/a2aOnlySessionPackageBuilder';
+export {
+  createSessionWalletAndAccount,
+  buildAgentDelegation,
+  buildDelegationSessionPackage,
+  generateSessionPackage,
+  generateSmartAgentDelegationSessionPackage,
+  approveErc8004SessionOperator,
+  DEFAULT_ENTRY_POINT,
+  DEFAULT_SELECTOR,
+} from './client/sessionPackageBuilder';
+export type {
+  AgentDelegationArtifacts,
+  BuildAgentDelegationParams,
+  BuildDelegationSessionPackageParams,
+  CreateSessionWalletAndAccountParams,
+  GenerateSessionPackageParams,
+  GenerateSmartAgentDelegationSessionPackageParams,
+  SessionWalletAndAccountArtifacts,
+} from './client/sessionPackageBuilder';
 
 
 

@@ -12,12 +12,23 @@ import { defineChain, http, createPublicClient, createWalletClient, type Chain, 
 import { privateKeyToAccount, type Account } from 'viem/accounts';
 import { getChainEnvVar } from './chainConfig';
 import { Implementation, toMetaMaskSmartAccount } from '@metamask/smart-accounts-kit';
-import type { SessionPackage } from '../../shared/sessionPackage';
+import type {
+  A2AOnlySessionPackage,
+  AnySessionPackage,
+  DelegationSessionPackage,
+  SessionPackage,
+  SmartAgentDelegationSessionPackage,
+} from '../../shared/sessionPackage';
+import {
+  isA2AOnlySessionPackage as isA2AOnlySessionPackageShared,
+  isErc8004SessionPackage,
+  isSmartAgentDelegationSessionPackage as isSmartAgentDelegationSessionPackageShared,
+} from '../../shared/sessionPackageGating';
 
 type Hex = `0x${string}`;
 
 export type DelegationSetup = {
-  agentId: number;
+  agentId?: number;
   chainId: number;
   chain: Chain;
   rpcUrl: string;
@@ -126,38 +137,107 @@ export function loadSessionPackage(filePath?: string): SessionPackage {
   return parsed as SessionPackage;
 }
 
-/**
- * Validate session package structure
- * Note: bundlerUrl and reputationRegistry can come from environment variables
- */
-export function validateSessionPackage(pkg: SessionPackage): void {
+export function loadAnySessionPackage(filePath?: string): AnySessionPackage {
+  // Reuse the path resolution logic from loadSessionPackage by reading the same file,
+  // but do not assume delegation-only shape.
+  const raw = (() => {
+    // The easiest way to preserve existing resolution logic is to call loadSessionPackage(),
+    // but that casts to SessionPackage. Instead, we replicate the file read here.
+    let p: string;
+    if (filePath) {
+      p = path.resolve(filePath);
+    } else {
+      const envPath = process.env.AGENTIC_TRUST_SESSION_PACKAGE_PATH;
+      if (envPath) {
+        p = path.resolve(envPath);
+      } else {
+        p = path.join(process.cwd(), 'sessionPackage.json.secret');
+        if (!fs.existsSync(p)) {
+          try {
+            const __filename = fileURLToPath(import.meta.url);
+            const __dirname = path.dirname(__filename);
+            p = path.join(__dirname, 'sessionPackage.json.secret');
+          } catch {
+            p = path.join(process.cwd(), 'sessionPackage.json.secret');
+          }
+        }
+      }
+    }
+
+    if (!fs.existsSync(p)) {
+      throw new Error(
+        `Session package file not found: ${p}\n` +
+          'Set AGENTIC_TRUST_SESSION_PACKAGE_PATH environment variable or provide filePath parameter.',
+      );
+    }
+    return fs.readFileSync(p, 'utf-8');
+  })();
+
+  const parsed = JSON.parse(raw) as AnySessionPackage;
+  return parsed;
+}
+
+export function isA2AOnlySessionPackage(pkg: unknown): pkg is A2AOnlySessionPackage {
+  return isA2AOnlySessionPackageShared(pkg);
+}
+
+export function isSmartAgentDelegationSessionPackage(
+  pkg: unknown,
+): pkg is SmartAgentDelegationSessionPackage {
+  return isSmartAgentDelegationSessionPackageShared(pkg);
+}
+
+export function validateA2AOnlySessionPackage(pkg: A2AOnlySessionPackage): void {
+  if (pkg.kind !== 'a2a-only') throw new Error('sessionPackage.kind must be "a2a-only"');
+  if (!pkg.chainId) throw new Error('sessionPackage.chainId is required');
+  if (!pkg.did) throw new Error('sessionPackage.did is required');
+  if (!pkg.sessionKey?.privateKey || !pkg.sessionKey?.address) {
+    throw new Error('sessionPackage.sessionKey.privateKey and address are required');
+  }
+  if (!pkg.sessionKey?.validAfter || !pkg.sessionKey?.validUntil) {
+    throw new Error('sessionPackage.sessionKey.validAfter and validUntil are required');
+  }
+}
+
+export function validateDelegationSessionPackage(pkg: DelegationSessionPackage): void {
   if (!pkg.chainId) throw new Error('sessionPackage.chainId is required');
   if (!pkg.aa) throw new Error('sessionPackage.aa is required');
   if (!pkg.entryPoint) throw new Error('sessionPackage.entryPoint is required');
-  
-  // Check if bundlerUrl is in package or env var
+
   const envBundlerUrl = process.env.AGENTIC_TRUST_BUNDLER_URL;
   if (!pkg.bundlerUrl && !envBundlerUrl) {
     throw new Error('sessionPackage.bundlerUrl is required (or set AGENTIC_TRUST_BUNDLER_URL env var)');
   }
-  
+
   if (!pkg.sessionKey?.privateKey || !pkg.sessionKey?.address) {
     throw new Error('sessionPackage.sessionKey.privateKey and address are required');
   }
   if (!pkg.signedDelegation?.signature) {
     throw new Error('sessionPackage.signedDelegation.signature is required');
   }
-  // Validate delegation structure: either message (legacy) or flattened (new)
   const hasFlattened = 'delegate' in pkg.signedDelegation && 'delegator' in pkg.signedDelegation;
   if (!hasFlattened) {
-    throw new Error('sessionPackage.signedDelegation must have either message (legacy) or flattened delegation properties (delegate, delegator, etc.)');
+    throw new Error(
+      'sessionPackage.signedDelegation must have either message (legacy) or flattened delegation properties (delegate, delegator, etc.)',
+    );
   }
-  
-  // Check if reputationRegistry is in package or env var
-  const envReputationRegistry = getChainEnvVar('AGENTIC_TRUST_REPUTATION_REGISTRY', pkg.chainId);
-  if (!envReputationRegistry) {
-    throw new Error('sessionPackage.reputationRegistry is required (or set AGENTIC_TRUST_REPUTATION_REGISTRY env var)');
+
+  if (isSmartAgentDelegationSessionPackage(pkg)) {
+    if (!pkg.agentAccount) throw new Error('sessionPackage.agentAccount is required for smart-agent delegation packages');
+    return;
   }
+
+  if (isErc8004SessionPackage(pkg) && !Number.isFinite(pkg.agentId)) {
+    throw new Error('sessionPackage.agentId is required for 8004 delegation packages');
+  }
+}
+
+/**
+ * Validate session package structure
+ * Note: bundlerUrl and reputationRegistry can come from environment variables
+ */
+export function validateSessionPackage(pkg: SessionPackage): void {
+  validateDelegationSessionPackage(pkg);
 }
 
 /**
@@ -179,10 +259,10 @@ function defaultRpcUrlFor(chainId: number): string | null {
  * Priority: env vars > session package defaults
  */
 export function buildDelegationSetup(
-  pkg?: SessionPackage
+  pkg?: DelegationSessionPackage
 ): DelegationSetup {
   const session = pkg || loadSessionPackage();
-  validateSessionPackage(session);
+  validateDelegationSessionPackage(session);
   
   // RPC URL: env var or default, then session package
   const envRpcUrl = getChainEnvVar('AGENTIC_TRUST_RPC_URL', session.chainId);
@@ -215,7 +295,7 @@ export function buildDelegationSetup(
   });
 
   return {
-    agentId: session.agentId,
+    agentId: isErc8004SessionPackage(session) ? session.agentId : undefined,
     chainId: session.chainId,
     chain,
     rpcUrl,

@@ -192,6 +192,10 @@ export {
   isENSNameAvailable,
   isENSAvailable,
 } from './singletons/ensClient';
+export {
+  getEnsAgentMetadataBundle,
+  prepareEnsAgentMetadataUpdate,
+} from './lib/ensMetadata';
 
 // API helpers for server routes (discovery/search)
 export {
@@ -278,10 +282,21 @@ export {
 
 // Session package utilities (Node.js fs access)
 export type { DelegationSetup } from './lib/sessionPackage';
-export type { SessionPackage } from '../shared/sessionPackage';
+export type {
+  AnySessionPackage,
+  A2AOnlySessionPackage,
+  DelegationSessionPackage,
+  SessionPackage,
+  SmartAgentDelegationSessionPackage,
+} from '../shared/sessionPackage';
 export {
   loadSessionPackage,
+  loadAnySessionPackage,
   validateSessionPackage,
+  validateDelegationSessionPackage,
+  validateA2AOnlySessionPackage,
+  isA2AOnlySessionPackage,
+  isSmartAgentDelegationSessionPackage,
   buildDelegationSetup,
   buildSessionPackage,
 } from './lib/sessionPackage';
