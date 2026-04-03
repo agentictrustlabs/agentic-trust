@@ -1199,14 +1199,10 @@ export default function AdminPage() {
             const { syncAgentToATP } = await import('@/lib/a2a-client');
             const did8004 = buildDid8004(parsedChainId, agentIdNumeric);
             // Use explicit values (do not derive/normalize names).
-            const agentNameForATP = displayAgentName === '...' ? '' : String(displayAgentName || '');
-            const ensName =
-              typeof fetchedAgentInfo?.didName === 'string' ? (fetchedAgentInfo.didName as string) : undefined;
-            
             console.log(`[Session Package] Sending sync to ATP with:`, {
               agentName: agentNameForATP,
               agentAccount: displayAgentAddress,
-              ensName,
+              ensName: ensNameForATP,
               chainId: parsedChainId,
               sessionPackageLength: JSON.stringify(pkg).length,
               displayAgentName,
@@ -1219,7 +1215,7 @@ export default function AdminPage() {
               displayAgentAddress as string,
               pkg,
               {
-                ensName,
+                ensName: ensNameForATP,
                 chainId: parsedChainId,
               }
             );
@@ -1264,7 +1260,7 @@ export default function AdminPage() {
 
   const handleGenerateSmartAgentSessionPackage = useCallback(
     async () => {
-      if (!isEditMode || !isSmartAgentMode || !finalChainId || !displayAgentAddress) {
+      if (!isEditMode || !hasSmartAgentBase || !finalChainId || !displayAgentAddress) {
         return;
       }
 
@@ -1332,13 +1328,12 @@ export default function AdminPage() {
 
         try {
           const { syncAgentToATP } = await import('@/lib/a2a-client');
-          const agentNameForATP = displayAgentName === '...' ? '' : String(displayAgentName || '');
           const syncResult = await syncAgentToATP(
             agentNameForATP,
             displayAgentAddress as string,
             pkg,
             {
-              ensName: derivedEnsNameForATP || undefined,
+                ensName: ensNameForATP,
               chainId: parsedChainId,
             },
           );
@@ -1366,7 +1361,7 @@ export default function AdminPage() {
     },
     [
       isEditMode,
-      isSmartAgentMode,
+      hasSmartAgentBase,
       finalChainId,
       displayAgentAddress,
       eip1193Provider,
@@ -1553,6 +1548,38 @@ export default function AdminPage() {
     title: string;
     body: string;
   }>({ open: false, title: '', body: '' });
+
+  const ensNameForATP = useMemo(() => {
+    const value = String(
+      (typeof fetchedAgentInfo?.didName === 'string' ? fetchedAgentInfo.didName : '') ||
+        smartAgentEnsName ||
+        derivedEnsNameForATP ||
+        '',
+    ).trim();
+    return value || undefined;
+  }, [fetchedAgentInfo, smartAgentEnsName, derivedEnsNameForATP]);
+
+  const agentNameForATP = useMemo(() => {
+    const explicitName = String(displayAgentName || '').trim();
+    if (explicitName && explicitName !== '...' && !explicitName.endsWith('.eth')) {
+      return explicitName;
+    }
+    if (ensAgentMetadata.name.trim()) {
+      return ensAgentMetadata.name.trim();
+    }
+    if (smartAgentEnsName) {
+      const derived = deriveEnsAgentNameFromEnsName(smartAgentEnsName);
+      if (derived.trim()) return derived.trim();
+    }
+    if (ensNameForATP) {
+      const derived = deriveEnsAgentNameFromEnsName(ensNameForATP);
+      if (derived.trim()) return derived.trim();
+    }
+    if (explicitName && explicitName !== '...') {
+      return explicitName;
+    }
+    return '';
+  }, [displayAgentName, ensAgentMetadata.name, smartAgentEnsName, ensNameForATP]);
   
   // OASF Skills and Domains for A2A protocol
   const [registrationA2aSkills, setRegistrationA2aSkills] = useState<string[]>([]);
@@ -1572,6 +1599,20 @@ export default function AdminPage() {
   
   // Tab state for Agent Info pane
   const [agentInfoTab, setAgentInfoTab] = useState<string>('overview');
+
+  useEffect(() => {
+    const validTabs = new Set<string>(['overview']);
+    if (hasSmartAgentBase) validTabs.add('ensMetadata');
+    if (hasErc8004Extension) {
+      validTabs.add('info');
+      validTabs.add('taxonomy');
+      validTabs.add('protocols');
+    }
+
+    if (!validTabs.has(agentInfoTab)) {
+      setAgentInfoTab(hasSmartAgentBase ? 'ensMetadata' : 'overview');
+    }
+  }, [agentInfoTab, hasSmartAgentBase, hasErc8004Extension]);
 
   useEffect(() => {
     if (!hasErc8004Extension) {
@@ -1759,6 +1800,23 @@ export default function AdminPage() {
     });
   }, []);
 
+  const fetchAgentCardFromRegistrationA2A = useCallback(async () => {
+    const a2aUrl = registrationA2aEndpoint.trim();
+    if (!a2aUrl) {
+      return null;
+    }
+
+    const response = await fetch(`/api/a2a/card?url=${encodeURIComponent(a2aUrl)}`, {
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    return ((data as any)?.card ?? null) as any;
+  }, [registrationA2aEndpoint]);
+
   // Load agent card and count skills/domains when A2A endpoint is available
   useEffect(() => {
     if (!isEditMode || !finalAgentId || !finalChainId || !registrationA2aEndpoint) {
@@ -1774,20 +1832,9 @@ export default function AdminPage() {
         const parsedChainId = Number.parseInt(finalChainId, 10);
         if (!Number.isFinite(parsedChainId)) return;
 
-        const response = await fetch(`/api/agents/${encodeURIComponent(agentUaidForApi ?? '')}/card`, {
-          cache: 'no-store',
-        });
-
         if (cancelled) return;
-        if (!response.ok) {
-          setAgentCardSkillsCount(null);
-          setAgentCardDomainsCount(null);
-          return;
-        }
-
-        const data = await response.json();
-        const card = data.card as any;
-
+        const card = await fetchAgentCardFromRegistrationA2A();
+        if (cancelled) return;
         if (!card) {
           setAgentCardSkillsCount(null);
           setAgentCardDomainsCount(null);
@@ -1843,7 +1890,7 @@ export default function AdminPage() {
     return () => {
       cancelled = true;
     };
-  }, [isEditMode, finalAgentId, finalChainId, registrationA2aEndpoint, oasfSkills, oasfDomains]);
+  }, [isEditMode, finalAgentId, finalChainId, registrationA2aEndpoint, oasfSkills, oasfDomains, fetchAgentCardFromRegistrationA2A]);
 
   // Sync skills from agent-card.json
   const handleSyncSkills = useCallback(async () => {
@@ -1858,16 +1905,7 @@ export default function AdminPage() {
         throw new Error('Invalid chainId');
       }
 
-      const response = await fetch(`/api/agents/${encodeURIComponent(agentUaidForApi ?? '')}/card`, {
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agent card: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const card = data.card as any;
+      const card = await fetchAgentCardFromRegistrationA2A();
 
       if (!card) {
         throw new Error('Agent card not found');
@@ -1927,7 +1965,7 @@ export default function AdminPage() {
     } finally {
       setSyncingSkills(false);
     }
-  }, [isEditMode, finalAgentId, finalChainId, registrationA2aEndpoint, syncingSkills, oasfSkills]);
+  }, [isEditMode, finalAgentId, finalChainId, registrationA2aEndpoint, syncingSkills, oasfSkills, fetchAgentCardFromRegistrationA2A]);
 
   // Sync domains from agent-card.json
   const handleSyncDomains = useCallback(async () => {
@@ -1942,16 +1980,7 @@ export default function AdminPage() {
         throw new Error('Invalid chainId');
       }
 
-      const response = await fetch(`/api/agents/${encodeURIComponent(agentUaidForApi ?? '')}/card`, {
-        cache: 'no-store',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch agent card: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const card = data.card as any;
+      const card = await fetchAgentCardFromRegistrationA2A();
 
       if (!card) {
         throw new Error('Agent card not found');
@@ -1979,7 +2008,7 @@ export default function AdminPage() {
     } finally {
       setSyncingDomains(false);
     }
-  }, [isEditMode, finalAgentId, finalChainId, registrationA2aEndpoint, syncingDomains, oasfDomains]);
+  }, [isEditMode, finalAgentId, finalChainId, registrationA2aEndpoint, syncingDomains, oasfDomains, fetchAgentCardFromRegistrationA2A]);
 
   // Helper function to render categorized options (same as agent-registration page)
   const renderCategorizedOptions = useCallback(
@@ -2026,6 +2055,7 @@ export default function AdminPage() {
   const [sessionPackageProgress, setSessionPackageProgress] = useState(0);
   const sessionPackageProgressTimerRef = useRef<number | null>(null);
   const [sessionPackageConfirmOpen, setSessionPackageConfirmOpen] = useState(false);
+  const [sessionPackageMode, setSessionPackageMode] = useState<'smart-agent' | 'erc8004'>('smart-agent');
 
   // Agent Skills (ATP agent_card_json config)
   const [agentSkillsLoading, setAgentSkillsLoading] = useState(false);
@@ -2037,6 +2067,24 @@ export default function AdminPage() {
 
   const [activeToggleSaving, setActiveToggleSaving] = useState(false);
   const [activeToggleError, setActiveToggleError] = useState<string | null>(null);
+  const hasSessionSmartAccount = Boolean(resolvePlainAddress(displayAgentAddress));
+  const resolvedAgentUri =
+    (typeof ensAgentMetadata.agentUri === 'string' && ensAgentMetadata.agentUri.trim()) ||
+    (typeof (fetchedAgentInfo as any)?.agentUri === 'string' && String((fetchedAgentInfo as any).agentUri).trim()) ||
+    registrationLatestTokenUri ||
+    '';
+  const availableSessionPackageModes = useMemo(() => {
+    const modes: Array<'smart-agent' | 'erc8004'> = [];
+    if (hasSessionSmartAccount && hasSmartAgentBase) modes.push('smart-agent');
+    if (hasSessionSmartAccount && hasErc8004Extension) modes.push('erc8004');
+    return modes;
+  }, [hasSessionSmartAccount, hasSmartAgentBase, hasErc8004Extension]);
+
+  useEffect(() => {
+    if (!availableSessionPackageModes.includes(sessionPackageMode)) {
+      setSessionPackageMode(availableSessionPackageModes[0] ?? 'smart-agent');
+    }
+  }, [availableSessionPackageModes, sessionPackageMode]);
 
   const validateUrlLike = useCallback((value: string): string | null => {
     const trimmed = value.trim();
@@ -2083,7 +2131,7 @@ export default function AdminPage() {
         setRegistrationMcpError(null);
         
         // Reset tab to first tab
-        setAgentInfoTab('name');
+        setAgentInfoTab(hasSmartAgentBase ? 'ensMetadata' : 'overview');
 
         const parsedChainId = Number.parseInt(finalChainId, 10);
         if (!Number.isFinite(parsedChainId)) {
@@ -2245,7 +2293,6 @@ export default function AdminPage() {
       return;
     }
 
-    const agentNameForATP = displayAgentName === '...' ? '' : String(displayAgentName || '');
     if (!agentNameForATP) {
       setAgentSkillsError('Agent name is missing.');
       return;
@@ -2263,7 +2310,7 @@ export default function AdminPage() {
       const configJson = JSON.stringify(configObj);
 
       const res = await updateAgentCardConfigInATP(agentNameForATP, displayAgentAddress, configJson, {
-        ensName: derivedEnsNameForATP || undefined,
+        ensName: ensNameForATP,
         chainId: parsedChainId,
       });
       if (!res.success) {
@@ -2276,7 +2323,7 @@ export default function AdminPage() {
     } finally {
       setAgentSkillsSaving(false);
     }
-  }, [isEditMode, finalAgentId, finalChainId, displayAgentAddress, displayAgentName, agentSkillsSelectedIds, derivedEnsNameForATP]);
+  }, [isEditMode, finalAgentId, finalChainId, displayAgentAddress, agentNameForATP, agentSkillsSelectedIds, ensNameForATP]);
 
   // Keep the preview JSON in sync with the currently selected skills (live as you click).
   useEffect(() => {
@@ -3216,7 +3263,7 @@ export default function AdminPage() {
 
       if (nextActive && !nftOperator.loading && !effectiveOperatorAddress) {
         throw new Error(
-          'You must set an Operator on the NFT before activating. Go to Agent Operator tab and click "Set Operator Session Keys and Delegation".',
+          'You must create an ERC-8004 operator session package before activating this NFT-backed agent.',
         );
       }
 
@@ -5622,15 +5669,157 @@ export default function AdminPage() {
                 {(!isEditMode || activeManagementTab === 'session') && (
                   <Paper sx={{ p: 3 }}>
                     <Typography variant="h5" gutterBottom>
-                      {isSmartAgentMode ? 'Smart Agent Operator' : 'Agent Operator'}
+                      Agent Operator Session Package
                     </Typography>
                     <Typography variant="body2" color="text.secondary" paragraph>
-                      {isSmartAgentMode
-                        ? 'The Smart Agent Operator creates a delegation-based operator session from the principal wallet and principal smart account. The stored session package contains the session EOA, session smart account, and signed delegation without relying on an ERC-8004 NFT operator.'
-                        : 'The Agent Operator is a delegation from the Agent Owner to an operator that allows the agent app to interact with the Reputation Registry and Validation Registry. A session package contains the operator session keys and delegation information that enables this functionality.'}
+                      The editor adapts to the agent identity model. Session package configuration is only available when the agent resolves to a smart account, then the UI shows Smart Agent, ENS-linked, and ERC-8004 operator capabilities as applicable.
                     </Typography>
+                    {!hasSessionSmartAccount ? (
+                      <Alert severity="warning" sx={{ mb: 2 }}>
+                        This agent does not currently resolve to a smart account, so a delegation session package cannot be created here.
+                      </Alert>
+                    ) : (
                       <>
-                    {!isSmartAgentMode ? (
+                        <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+                            Detected capabilities
+                          </Typography>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} md={4}>
+                              <Typography variant="caption" color="text.secondary">Smart Account Base</Typography>
+                              <Box sx={{ mt: 0.5 }}>
+                                <Chip
+                                  size="small"
+                                  color="success"
+                                  label={hasSessionSmartAccount ? 'Available' : 'Missing'}
+                                />
+                              </Box>
+                              {(principalSmartAccount || displayAgentAddress) && (
+                                <Typography variant="body2" sx={{ mt: 1, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                  {principalSmartAccount ?? displayAgentAddress}
+                                </Typography>
+                              )}
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                              <Typography variant="caption" color="text.secondary">ENS-linked Identity</Typography>
+                              <Box sx={{ mt: 0.5 }}>
+                                <Chip
+                                  size="small"
+                                  color={hasSmartAgentBase ? 'success' : 'default'}
+                                  label={hasSmartAgentBase ? 'Detected' : 'Not detected'}
+                                />
+                              </Box>
+                              {hasSmartAgentBase && (
+                                <Typography variant="body2" sx={{ mt: 1 }}>
+                                  {smartAgentEnsName || smartAgentDid || 'Smart Agent identity detected'}
+                                </Typography>
+                              )}
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                              <Typography variant="caption" color="text.secondary">ERC-8004 Extension</Typography>
+                              <Box sx={{ mt: 0.5 }}>
+                                <Chip
+                                  size="small"
+                                  color={hasErc8004Extension ? 'success' : 'default'}
+                                  label={hasErc8004Extension ? `Detected (#${finalAgentId})` : 'Not detected'}
+                                />
+                              </Box>
+                              {hasErc8004Extension && (
+                                <Typography variant="body2" sx={{ mt: 1 }}>
+                                  Chain {finalChainId}
+                                </Typography>
+                              )}
+                            </Grid>
+                          </Grid>
+                        </Paper>
+
+                        {availableSessionPackageModes.length > 1 && (
+                          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                            <InputLabel id="session-package-mode-label">Session Package Type</InputLabel>
+                            <Select
+                              labelId="session-package-mode-label"
+                              value={sessionPackageMode}
+                              label="Session Package Type"
+                              onChange={(event) => setSessionPackageMode(event.target.value as 'smart-agent' | 'erc8004')}
+                            >
+                              {availableSessionPackageModes.includes('smart-agent') && (
+                                <MenuItem value="smart-agent">Smart Agent package</MenuItem>
+                              )}
+                              {availableSessionPackageModes.includes('erc8004') && (
+                                <MenuItem value="erc8004">ERC-8004 operator package</MenuItem>
+                              )}
+                            </Select>
+                          </FormControl>
+                        )}
+
+                        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+                            {sessionPackageMode === 'smart-agent' ? 'Smart Agent session configuration' : 'ERC-8004 operator session configuration'}
+                          </Typography>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                label="Principal EOA"
+                                value={principalEoa ?? ''}
+                                fullWidth
+                                disabled
+                                size="small"
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                label="Principal Smart Account"
+                                value={principalSmartAccount ?? displayAgentAddress ?? ''}
+                                fullWidth
+                                disabled
+                                size="small"
+                              />
+                            </Grid>
+                            {sessionPackageMode === 'smart-agent' && (
+                              <>
+                                <Grid item xs={12} md={6}>
+                                  <TextField label="ENS Name" value={smartAgentEnsName} fullWidth disabled size="small" />
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                  <TextField label="Smart Agent DID" value={smartAgentDid ?? ''} fullWidth disabled size="small" />
+                                </Grid>
+                                <Grid item xs={12}>
+                                  <TextField label="agent-uri" value={resolvedAgentUri} fullWidth disabled size="small" />
+                                </Grid>
+                                <Grid item xs={12}>
+                                  <Alert severity="info">
+                                    This package includes the smart-account delegation base. When ENS metadata is present, the stored package also carries Smart Agent identity anchors such as `uaid`, `did`, and `ensName`.
+                                  </Alert>
+                                </Grid>
+                              </>
+                            )}
+                            {sessionPackageMode === 'erc8004' && (
+                              <>
+                                <Grid item xs={12} md={4}>
+                                  <TextField label="Agent ID" value={finalAgentId ?? ''} fullWidth disabled size="small" />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                  <TextField label="Chain ID" value={finalChainId ?? ''} fullWidth disabled size="small" />
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                  <TextField
+                                    label="NFT Operator"
+                                    value={nftOperator.operatorAddress ?? ''}
+                                    fullWidth
+                                    disabled
+                                    size="small"
+                                  />
+                                </Grid>
+                                <Grid item xs={12}>
+                                  <Alert severity="info">
+                                    This package keeps the current ERC-8004 flow: session EOA, session smart account, delegation scopes, and ERC-8004 operator approval.
+                                  </Alert>
+                                </Grid>
+                              </>
+                            )}
+                          </Grid>
+                        </Paper>
+                    {sessionPackageMode === 'erc8004' ? (
                       <Box 
                         sx={{ 
                           mb: 2, 
@@ -5694,7 +5883,7 @@ export default function AdminPage() {
 
                         {!nftOperator.loading && !registrationPreviewLoading && !nftOperator.operatorAddress && (
                           <Alert severity="warning" sx={{ mt: 1 }}>
-                            Cannot activate until an Operator is assigned to the NFT. Click "Set Operator Session Keys and Delegation" below.
+                            Cannot activate until an operator is assigned to the NFT. Create the ERC-8004 operator session package below first.
                           </Alert>
                         )}
 
@@ -5706,7 +5895,7 @@ export default function AdminPage() {
                       </Box>
                     ) : (
                       <Alert severity="info" sx={{ mb: 2 }}>
-                        Smart Agents do not require an ERC-8004 NFT operator. This flow creates a delegation session from the principal smart account and linked ENS identity only.
+                        Smart Agent packages do not require an ERC-8004 NFT operator. This flow creates a delegation session from the principal wallet and principal smart account, with ENS-linked identity metadata included when available.
                       </Alert>
                     )}
 
@@ -5717,10 +5906,10 @@ export default function AdminPage() {
                       sx={{ mb: 2 }}
                     >
                       {sessionPackageLoading
-                        ? (isSmartAgentMode ? 'Setting Smart Agent Session Keys…' : 'Setting Operator Session Keys…')
-                        : (isSmartAgentMode
-                            ? 'Set Smart Agent Session Keys and Delegation'
-                            : 'Set Operator Session Keys and Delegation')}
+                        ? (sessionPackageMode === 'smart-agent' ? 'Setting Smart Agent Session Keys…' : 'Setting Operator Session Keys…')
+                        : (sessionPackageMode === 'smart-agent'
+                            ? 'Create Smart Agent Session Package'
+                            : 'Create ERC-8004 Operator Session Package')}
                     </Button>
 
                     {sessionPackageLoading && (
@@ -5792,18 +5981,20 @@ export default function AdminPage() {
                       onClose={() => setSessionPackageConfirmOpen(false)}
                     >
                       <DialogTitle>
-                        {isSmartAgentMode ? 'Confirm Smart Agent Session Keys Change' : 'Confirm Operator Session Keys Change'}
+                        {sessionPackageMode === 'smart-agent'
+                          ? 'Confirm Smart Agent Session Package'
+                          : 'Confirm ERC-8004 Operator Session Package'}
                       </DialogTitle>
                       <DialogContent>
                         <Typography variant="body1" paragraph>
-                          {isSmartAgentMode
-                            ? 'Are you sure you want to set new Smart Agent session keys and delegation?'
-                            : 'Are you sure you want to set new Operator Session Keys and Delegation?'}
+                          {sessionPackageMode === 'smart-agent'
+                            ? 'Are you sure you want to create a Smart Agent session package from the principal wallet and smart account?'
+                            : 'Are you sure you want to create a new ERC-8004 operator session package?'}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {isSmartAgentMode
-                            ? 'This will create a new smart-agent delegation package with a fresh session EOA, session smart account, and signed delegation tied to the principal smart account and ENS-backed identity.'
-                            : 'This will create a new session package with new operator session keys. The previous operator session keys will be replaced. This action allows the agent app to interact with the Reputation Registry and Validation Registry.'}
+                          {sessionPackageMode === 'smart-agent'
+                            ? 'This creates a package with a fresh session EOA, session smart account, and signed delegation tied to the principal smart account. ENS identity anchors are included when available.'
+                            : 'This creates a package with new operator session keys, signed delegation, and ERC-8004 operator approval so the agent app can continue using the current 8004 flows.'}
                         </Typography>
                       </DialogContent>
                       <DialogActions>
@@ -5813,7 +6004,7 @@ export default function AdminPage() {
                         <Button
                           onClick={() => {
                             setSessionPackageConfirmOpen(false);
-                            if (isSmartAgentMode) {
+                            if (sessionPackageMode === 'smart-agent') {
                               handleGenerateSmartAgentSessionPackage();
                             } else {
                               handleGenerateSessionPackage();
@@ -5827,6 +6018,7 @@ export default function AdminPage() {
                       </DialogActions>
                     </Dialog>
                       </>
+                    )}
                   </Paper>
                 )}
         {(!isEditMode || activeManagementTab === 'transfer') && (
