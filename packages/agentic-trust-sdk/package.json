@@ -1,6 +1,6 @@
 {
   "name": "@agentic-trust/agentic-trust-sdk",
-  "version": "1.0.44",
+  "version": "1.0.46",
   "description": "Agentic Trust SDK - TypeScript SDK for managing AI agents with ENS integration, identity management, and reputation systems",
   "type": "module",
   "main": "./dist/index.js",

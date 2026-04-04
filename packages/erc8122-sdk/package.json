@@ -1,6 +1,6 @@
 {
   "name": "@agentic-trust/8122-sdk",
-  "version": "1.0.44",
+  "version": "1.0.46",
   "description": "ERC-8122 Agent Registry SDK - ABIs + helpers for interacting with ERC-8122 registries/registrars",
   "type": "module",
   "main": "./dist/index.js",

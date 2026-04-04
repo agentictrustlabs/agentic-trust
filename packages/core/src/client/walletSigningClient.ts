@@ -29,6 +29,14 @@ export {
   createAgentDirect,
 } from '../api/agents/directClient';
 
+// Split session-package flow (browser-safe exports)
+export {
+  signAgentDelegation,
+  DEFAULT_SELECTOR as DEFAULT_DELEGATION_SELECTOR,
+  SMART_AGENT_DEFAULT_SELECTOR as SMART_AGENT_DELEGATION_SELECTOR,
+} from './delegationSigning';
+export type { DelegationSignatureArtifacts, SignAgentDelegationParams } from './delegationSigning';
+
 export type {
   PreparedTransaction,
   TransactionResult,
