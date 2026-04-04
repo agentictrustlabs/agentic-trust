@@ -33,8 +33,6 @@ export function Header({
   const pathname = usePathname() ?? '/';
   const router = useRouter();
   const [graphLoading, setGraphLoading] = useState(false);
-  const [kbSyncing, setKbSyncing] = useState(false);
-  const [kbSyncStatus, setKbSyncStatus] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [navigatingToRegistration, setNavigatingToRegistration] = useState(false);
@@ -124,61 +122,6 @@ export function Header({
       setGraphLoading(false);
     }
   }, [displayAddress, graphiqlFallback]);
-
-  const handleRefreshKnowledgeBase = useCallback(async () => {
-    if (kbSyncing) return;
-    setKbSyncing(true);
-    setKbSyncStatus('starting');
-    try {
-      const resp = await fetch('/api/sync/agent-pipeline?chainId=all', { method: 'POST' });
-      const json = (await resp.json().catch(() => null)) as any;
-      if (!resp.ok || !json?.ok) {
-        throw new Error(typeof json?.error === 'string' ? json.error : 'Failed to start KB sync');
-      }
-
-      const jobId = typeof json?.jobId === 'string' ? json.jobId : null;
-      if (!jobId) {
-        // Sync started but no jobId; treat as fire-and-forget.
-        setKbSyncStatus('started');
-        return;
-      }
-
-      setKbSyncStatus(`job ${jobId}`);
-
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      // Poll for ~60s max (avoid spamming /api and never-ending loops).
-      for (let i = 0; i < 30; i++) {
-        await sleep(2000);
-        const s = await fetch(`/api/sync/jobs/${encodeURIComponent(jobId)}`, { method: 'GET' });
-        const sj = (await s.json().catch(() => null)) as any;
-        const body = sj?.body ?? null;
-        const statusRaw = body && typeof body === 'object' ? (body.status ?? body.state) : null;
-        const status = typeof statusRaw === 'string' ? statusRaw : typeof statusRaw === 'number' ? String(statusRaw) : null;
-        if (status) setKbSyncStatus(status);
-
-        const lower = status ? status.toLowerCase() : '';
-        const terminal = Boolean(
-          lower && ['completed', 'complete', 'done', 'success', 'succeeded', 'failed', 'error', 'cancelled', 'canceled'].includes(lower),
-        );
-        if (terminal) {
-          if (lower === 'failed' || lower === 'error') {
-            const errMsg =
-              body && typeof body === 'object' && typeof body.error === 'string' && body.error.trim()
-                ? body.error.trim()
-                : 'KB sync failed';
-            // Show the reason once, at terminal state.
-            alert(errMsg);
-          }
-          break;
-        }
-      }
-    } catch (e) {
-      console.error('[Header] KB sync failed', e);
-      alert(e instanceof Error ? e.message : 'KB sync failed');
-    } finally {
-      setKbSyncing(false);
-    }
-  }, [kbSyncing]);
 
   return (
     <>
@@ -575,10 +518,9 @@ export function Header({
                   <button
                     type="button"
                     onClick={() => {
-                      // Keep menu open so user can see status change.
-                      void handleRefreshKnowledgeBase();
+                      // Sync is handled in a separate project.
                     }}
-                    disabled={kbSyncing}
+                    disabled
                     style={{
                       width: '100%',
                       padding: '0.6rem 0.85rem',
@@ -586,19 +528,14 @@ export function Header({
                       border: 'none',
                       textAlign: 'left',
                       fontSize: '0.9rem',
-                      cursor: kbSyncing ? 'not-allowed' : 'pointer',
+                      cursor: 'not-allowed',
                       color: palette.textPrimary,
                       borderBottom: `1px solid ${palette.border}`,
-                      opacity: kbSyncing ? 0.7 : 1,
+                      opacity: 0.7,
                     }}
                     title="Trigger knowledge base sync (chainId=all)"
                   >
-                    {kbSyncing ? 'Refreshing KB…' : 'Refresh KB'}
-                    {kbSyncStatus ? (
-                      <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: palette.textSecondary }}>
-                        {kbSyncStatus}
-                      </span>
-                    ) : null}
+                    Refresh KB (disabled)
                   </button>
                   <button
                     type="button"

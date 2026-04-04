@@ -197,6 +197,28 @@ function parseEnsNameFromDid(value: unknown): string | null {
   }
 }
 
+function parseEnsDidParts(value: unknown): { ensName: string | null; chainId: number | null } {
+  if (typeof value !== 'string') return { ensName: null, chainId: null };
+  const raw = value.trim();
+  if (!raw) return { ensName: null, chainId: null };
+  // Supported formats:
+  // - did:ens:<chainId>:<ensName>
+  // - did:ens:<ensName>   (legacy / KB sometimes omits chainId)
+  if (!raw.startsWith('did:ens:')) return { ensName: null, chainId: null };
+  const tail = raw.slice('did:ens:'.length).trim();
+  if (!tail) return { ensName: null, chainId: null };
+  const parts = tail.split(':').filter(Boolean);
+  if (parts.length >= 2 && /^\d+$/.test(parts[0] || '')) {
+    const chainId = Number(parts[0]);
+    const ensName = parts.slice(1).join(':').trim();
+    return {
+      ensName: ensName ? ensName : null,
+      chainId: Number.isFinite(chainId) ? chainId : null,
+    };
+  }
+  return { ensName: tail, chainId: null };
+}
+
 function formatObjectJson(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   try {
@@ -899,8 +921,17 @@ const AgentDetailsTabs = ({
 
         const didStr = typeof did === 'string' && did.trim() ? did.trim() : null;
         const parsed =
-          kind === 'id8004' ? parseDid8004Parts(didStr) : kind === 'id8122' ? parseDid8122Parts(didStr) : null;
-        const chainId = parsed?.chainId ?? null;
+          kind === 'id8004'
+            ? parseDid8004Parts(didStr)
+            : kind === 'id8122'
+              ? parseDid8122Parts(didStr)
+              : null;
+        const ensParts = kind === 'ens' ? parseEnsDidParts(didStr) : { ensName: null, chainId: null };
+        const chainId =
+          parsed?.chainId ??
+          (kind === 'ens'
+            ? (typeof ident?.chainId === 'number' ? Number(ident.chainId) : ensParts.chainId ?? parseChainIdFromUaid(uaid) ?? null)
+            : null);
         const agentId = parsed?.agentId ?? null;
 
         const descriptor = ident?.descriptor;
@@ -1009,7 +1040,7 @@ const AgentDetailsTabs = ({
       const bId = String(b.agentId ?? '');
       return aId.localeCompare(bId);
     });
-  }, [agent, identity8122CollectionName]);
+  }, [agent, identity8122CollectionName, uaid]);
 
   const hasEnsIdentity = identityTabs.some((t) => t.kind === 'ens');
   const hasHolIdentity = identityTabs.some((t) => t.kind === 'hol');
@@ -1226,15 +1257,20 @@ const AgentDetailsTabs = ({
       setEnsIdentityLoading(false);
       return;
     }
-    const ensName =
-      (typeof (activeIdentity?.identityNode as any)?.ensName === 'string'
+    const ensFromNode =
+      typeof (activeIdentity?.identityNode as any)?.ensName === 'string'
         ? String((activeIdentity?.identityNode as any)?.ensName).trim()
-        : '') || parseEnsNameFromDid(identityDid);
+        : '';
+    const ensFromDid = parseEnsNameFromDid(identityDid);
+    const ensName = ensFromNode || ensFromDid;
+    const didParts = parseEnsDidParts(identityDid);
     const chainId =
       activeIdentity?.chainId ??
       (typeof (activeIdentity?.identityNode as any)?.chainId === 'number'
         ? Number((activeIdentity?.identityNode as any)?.chainId)
         : null) ??
+      didParts.chainId ??
+      parseChainIdFromUaid(uaid) ??
       (typeof agent.chainId === 'number' ? agent.chainId : null);
     if (!ensName || !chainId) {
       setEnsIdentityBundle(null);

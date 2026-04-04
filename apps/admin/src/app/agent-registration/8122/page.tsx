@@ -1126,14 +1126,7 @@ export default function AgentRegistration8122WizardPage() {
         registrar: String(registrar),
       });
 
-      // Best-effort: trigger knowledge base sync after agent creation.
-      try {
-        const kbChainId =
-          selectedChainId === 1 || selectedChainId === 59144 ? String(selectedChainId) : 'all';
-        void fetch(`/api/sync/agent-pipeline?chainId=${encodeURIComponent(kbChainId)}`, { method: 'POST' });
-      } catch {
-        // ignore
-      }
+      // Sync is handled in a separate project.
     } catch (e) {
       // Ensure UI always shows something
       setError(formatViemError(e));

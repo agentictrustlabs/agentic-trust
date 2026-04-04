@@ -432,14 +432,7 @@ export default function AgentRegistration8004EoaPage() {
       setRegistrationCompleteOpen(true);
       setSuccess(agentId ? `Registered agent ${agentId}` : `Transaction confirmed: ${txResult.hash}`);
 
-      // Best-effort: trigger knowledge base sync after agent registration.
-      try {
-        const kbChainId =
-          selectedChainId === 1 || selectedChainId === 59144 ? String(selectedChainId) : 'all';
-        void fetch(`/api/sync/agent-pipeline?chainId=${encodeURIComponent(kbChainId)}`, { method: 'POST' });
-      } catch {
-        // ignore
-      }
+      // Sync is handled in a separate project.
     } catch (e: any) {
       setError(e?.message || 'Registration failed');
     } finally {
