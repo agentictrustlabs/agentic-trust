@@ -81,6 +81,12 @@ export {
   type ParsedDidEthr,
   type BuildDidEthrOptions,
 } from './shared/didEthr';
+export {
+  buildEnsNameFromParts,
+  buildPrepareEnsAgentMetadataRequest,
+  type EnsRegistrationEndpoint,
+  type PrepareEnsAgentMetadataRequest,
+} from './shared/ensAgentRegistration';
 
 // Chain / Web3Auth config helpers (safe for both client and server)
 export {
@@ -150,6 +156,7 @@ export {
   approveErc8004SessionOperator,
   DEFAULT_ENTRY_POINT,
   DEFAULT_SELECTOR,
+  SMART_AGENT_DEFAULT_SELECTOR,
 } from './client/sessionPackageBuilder';
 export type {
   AgentDelegationArtifacts,
@@ -160,6 +167,17 @@ export type {
   GenerateSmartAgentDelegationSessionPackageParams,
   SessionWalletAndAccountArtifacts,
 } from './client/sessionPackageBuilder';
+export {
+  getAvailableSessionPackageModes,
+  getDefaultSessionPackageMode,
+  isSessionPackageModeAvailable,
+  resolveSessionPackageCapabilities,
+} from './client/sessionPackageCapabilities';
+export type {
+  SessionPackageCapabilities,
+  SessionPackageFacts,
+  SessionPackageMode,
+} from './client/sessionPackageCapabilities';
 
 
 

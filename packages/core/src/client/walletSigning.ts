@@ -48,6 +48,10 @@ import {
 } from '../api/agents/client';
 import type { AgentOperationMode, AgentOperationPlan } from '../api/agents/types';
 import { parseDid8004 } from '../shared/did8004';
+import {
+  buildEnsNameFromParts,
+  buildPrepareEnsAgentMetadataRequest,
+} from '../shared/ensAgentRegistration';
 export {
   getDeployedAccountClientByAgentName,
   getDeployedAccountClientByAddress,
@@ -2339,6 +2343,72 @@ async function createAgentWithWalletAA(
             registration: registrationUpdate,
             onStatusUpdate,
           });
+
+          if (options.ensOptions?.enabled && options.ensOptions.orgName) {
+            try {
+              onStatusUpdate?.('Preparing ENS Agent metadata update...');
+              const ensName = buildEnsNameFromParts(options.agentData.agentName, options.ensOptions.orgName);
+              const ensMetadataBody = buildPrepareEnsAgentMetadataRequest({
+                ensName,
+                chainId: chain.id,
+                agentName: options.agentData.agentName,
+                agentWallet: agentData.agentAccount,
+                agentUrl: options.agentData.agentUrl,
+                description: options.agentData.description,
+                image: options.agentData.image,
+                endpoints: options.agentData.endpoints,
+                supportedTrust: options.agentData.supportedTrust,
+                active: true,
+                agentId,
+                uaid,
+              });
+              const ensMetadataResponse = await fetch('/api/ens/agent-metadata', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ensMetadataBody),
+              });
+              if (!ensMetadataResponse.ok) {
+                const err = await ensMetadataResponse.json().catch(() => ({}));
+                console.warn('[createAgentWithWalletAA] ENS metadata preparation failed:', err);
+              } else {
+                const ensMetadataData = await ensMetadataResponse.json().catch(() => ({} as any));
+                const ensCalls = Array.isArray((ensMetadataData as any)?.calls)
+                  ? ((ensMetadataData as any).calls as Array<Record<string, unknown>>)
+                      .map((call) => {
+                        const to = typeof call?.to === 'string' ? (call.to as `0x${string}`) : null;
+                        const data = typeof call?.data === 'string' ? (call.data as `0x${string}`) : null;
+                        if (!to || !data) return null;
+                        let value = 0n;
+                        if (call?.value !== null && call?.value !== undefined) {
+                          try {
+                            value = BigInt(call.value as string | number | bigint);
+                          } catch {
+                            value = 0n;
+                          }
+                        }
+                        return { to, data, value };
+                      })
+                      .filter(Boolean)
+                  : [];
+                if (ensCalls.length > 0) {
+                  onStatusUpdate?.('MetaMask signature: publish ENS Agent metadata');
+                  const ensMetadataUserOpHash = await sendSponsoredUserOperation({
+                    bundlerUrl,
+                    chain: chain as any,
+                    accountClient: agentAccountClient,
+                    calls: ensCalls as Array<{ to: `0x${string}`; data: `0x${string}`; value?: bigint }>,
+                  });
+                  await waitForUserOperationReceipt({
+                    bundlerUrl,
+                    chain: chain as any,
+                    hash: ensMetadataUserOpHash,
+                  });
+                }
+              }
+            } catch (ensMetadataError) {
+              console.warn('[createAgentWithWalletAA] Failed to publish ENS Agent metadata:', ensMetadataError);
+            }
+          }
         } else {
           console.warn('[createAgentWithWalletAA] UAID endpoint returned no uaid value');
         }

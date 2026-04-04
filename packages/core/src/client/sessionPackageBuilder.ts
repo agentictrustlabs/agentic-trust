@@ -1,6 +1,7 @@
 export {
   DEFAULT_ENTRY_POINT,
   DEFAULT_SELECTOR,
+  SMART_AGENT_DEFAULT_SELECTOR,
   approveErc8004SessionOperator,
   buildAgentDelegation,
   buildDelegationSessionPackage,

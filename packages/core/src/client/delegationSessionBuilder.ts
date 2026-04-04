@@ -294,6 +294,8 @@ function getIsValidSignatureSelector(): `0x${string}` {
   return keccak256(stringToHex('isValidSignature(bytes32,bytes)')).slice(0, 10) as `0x${string}`;
 }
 
+export const SMART_AGENT_DEFAULT_SELECTOR = getIsValidSignatureSelector();
+
 export type BuildAgentDelegationParams = {
   session: SessionWalletAndAccountArtifacts;
   selector?: `0x${string}`;
@@ -734,11 +736,11 @@ export async function generateSmartAgentDelegationSessionPackage(
 
   const delegation = await buildAgentDelegation({
     session,
-    selector: params.selector,
+    selector: params.selector ?? SMART_AGENT_DEFAULT_SELECTOR,
     validationRegistry: params.validationRegistry,
     associationsProxy: params.associationsProxy,
-    includeValidationScope: true,
-    includeAssociationScope: true,
+    includeValidationScope: false,
+    includeAssociationScope: false,
     includeAgentAccountSignatureScope: true,
     performDelegationTest: params.performDelegationTest ?? true,
   });

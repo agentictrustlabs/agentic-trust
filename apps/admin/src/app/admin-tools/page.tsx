@@ -12,6 +12,7 @@ import { useAuth } from '@/components/AuthProvider';
 import type { Address, Chain } from 'viem';
 import { keccak256, toHex, getAddress, createPublicClient, http } from 'viem';
 import { ENS_AGENT_CLASS, buildDefaultEnsAgentRegistrationsPayload, buildDefaultEnsAgentServicesPayload, buildEnsAgentCanonicalPayload, buildEnsAgentSchemaDocument, buildEnsAgentServicesPayload, buildDid8004, deriveEnsAgentNameFromEnsName, parseDid8004, generateSessionPackage, generateSmartAgentDelegationSessionPackage, getDeployedAccountClientByAddress, getDeployedAccountClientByAgentName, updateAgentRegistrationWithWallet, requestNameValidationWithWallet, requestAccountValidationWithWallet, requestAppValidationWithWallet, requestAIDValidationWithWallet } from '@agentic-trust/core';
+import { useAvailableSessionPackageModes, useSessionPackageJob } from '@agentic-trust/core/react';
 import { sendSponsoredUserOperation, waitForUserOperationReceipt } from '@agentic-trust/core/client';
 import type { DiscoverParams as AgentSearchParams, DiscoverResponse, ValidationStatus } from '@agentic-trust/core/server';
 import {
@@ -928,6 +929,31 @@ export default function AdminPage() {
     }
   }, [queryTab, activeManagementTab]);
 
+  const hasSessionSmartAccount = Boolean(resolvePlainAddress(displayAgentAddress));
+  const {
+    availableModes: availableSessionPackageModes,
+    mode: sessionPackageMode,
+    setMode: setSessionPackageMode,
+  } = useAvailableSessionPackageModes({
+    hasSmartAccount: hasSessionSmartAccount,
+    hasEnsIdentity: hasSmartAgentBase,
+    hasErc8004Extension,
+  });
+  const {
+    text: sessionPackageText,
+    setText: setSessionPackageText,
+    loading: sessionPackageLoading,
+    error: sessionPackageError,
+    progress: sessionPackageProgress,
+    setProgress: setSessionPackageProgress,
+    confirmOpen: sessionPackageConfirmOpen,
+    openConfirm: openSessionPackageConfirm,
+    closeConfirm: closeSessionPackageConfirm,
+    begin: beginSessionPackageJob,
+    complete: completeSessionPackageJob,
+    fail: failSessionPackageJob,
+  } = useSessionPackageJob();
+
   const handleGenerateSessionPackage = useCallback(
     async () => {
       if (!isEditMode || !finalAgentId || !finalChainId || !displayAgentAddress) {
@@ -935,9 +961,7 @@ export default function AdminPage() {
       }
 
       try {
-        setSessionPackageError(null);
-        setSessionPackageLoading(true);
-        setSessionPackageText(null);
+        beginSessionPackageJob();
 
         if (!eip1193Provider || !headerAddress) {
           throw new Error('Wallet not connected. Connect your wallet to generate a session package.');
@@ -1167,30 +1191,19 @@ export default function AdminPage() {
             } finally {
               setRegistrationPreviewLoading(false);
             }
-            
-            setSessionPackageProgress(100);
-            
-            // Wait a bit before clearing loading to ensure UI updates are visible
-            setTimeout(() => {
-              setSessionPackageLoading(false);
-              setSessionPackageProgress(0);
-            }, 500);
+
+            completeSessionPackageJob({ resetAfterMs: 500 });
           } catch (e) {
             // Non-fatal: session package creation succeeded
             console.warn('[AdminTools] Unable to auto-set registration active flag:', e);
-            setSessionPackageProgress(100);
             // Reset loading states on error
             setNftOperator((prev) => ({ ...prev, loading: false }));
             setRegistrationPreviewLoading(false);
-            setTimeout(() => {
-              setSessionPackageLoading(false);
-              setSessionPackageProgress(0);
-            }, 500);
+            completeSessionPackageJob({ resetAfterMs: 500 });
           }
         } else {
           // Session package creation failed, so we're done
-          setSessionPackageLoading(false);
-          setSessionPackageProgress(0);
+          completeSessionPackageJob();
         }
 
         // Sync agent and session package to ATP agent (only if session package was created)
@@ -1238,23 +1251,24 @@ export default function AdminPage() {
 
       } catch (error: any) {
         console.error('Error creating session package (admin-tools):', error);
-        setSessionPackageError(
+        failSessionPackageJob(
           error?.message ?? 'Failed to create session package. Please try again.',
         );
         // Reset loading states on error
         setNftOperator((prev) => ({ ...prev, loading: false }));
         setRegistrationPreviewLoading(false);
-        setSessionPackageLoading(false);
-        setSessionPackageProgress(0);
       }
     },
     [
+      beginSessionPackageJob,
+      completeSessionPackageJob,
       isEditMode,
       finalAgentId,
       finalChainId,
       displayAgentAddress,
       eip1193Provider,
       headerAddress,
+      failSessionPackageJob,
     ],
   );
 
@@ -1265,9 +1279,7 @@ export default function AdminPage() {
       }
 
       try {
-        setSessionPackageError(null);
-        setSessionPackageLoading(true);
-        setSessionPackageText(null);
+        beginSessionPackageJob();
         setSessionPackageProgress(5);
 
         if (!eip1193Provider || !headerAddress) {
@@ -1290,16 +1302,6 @@ export default function AdminPage() {
             'Missing bundler URL configuration for this chain. Set NEXT_PUBLIC_AGENTIC_TRUST_BUNDLER_URL_* env vars.',
           );
         }
-        if (!chainEnv.validationRegistry) {
-          throw new Error(
-            'Missing ValidationRegistry address. Set NEXT_PUBLIC_AGENTIC_TRUST_VALIDATION_REGISTRY_* env vars.',
-          );
-        }
-        if (!chainEnv.associationsProxy) {
-          throw new Error(
-            'Missing AssociationsStore proxy. Set NEXT_PUBLIC_ASSOCIATIONS_STORE_PROXY_* env vars.',
-          );
-        }
 
         const agentAccountPlain = resolvePlainAddress(displayAgentAddress);
         if (!agentAccountPlain) {
@@ -1316,8 +1318,6 @@ export default function AdminPage() {
           ownerAddress: headerAddress as `0x${string}`,
           rpcUrl: chainEnv.rpcUrl,
           bundlerUrl: chainEnv.bundlerUrl,
-          validationRegistry: chainEnv.validationRegistry,
-          associationsProxy: chainEnv.associationsProxy,
           did: smartAgentDid ?? undefined,
           uaid: agentUaidForApi ?? undefined,
           ensName: derivedEnsNameForATP || undefined,
@@ -1345,21 +1345,17 @@ export default function AdminPage() {
           console.error('[Smart Agent Session Package] Error syncing agent to ATP:', syncError);
         }
 
-        setSessionPackageProgress(100);
-        setTimeout(() => {
-          setSessionPackageLoading(false);
-          setSessionPackageProgress(0);
-        }, 500);
+        completeSessionPackageJob({ resetAfterMs: 500 });
       } catch (error: any) {
         console.error('Error creating smart-agent session package (admin-tools):', error);
-        setSessionPackageError(
+        failSessionPackageJob(
           error?.message ?? 'Failed to create Smart Agent session package. Please try again.',
         );
-        setSessionPackageLoading(false);
-        setSessionPackageProgress(0);
       }
     },
     [
+      beginSessionPackageJob,
+      completeSessionPackageJob,
       isEditMode,
       hasSmartAgentBase,
       finalChainId,
@@ -1370,6 +1366,7 @@ export default function AdminPage() {
       agentUaidForApi,
       derivedEnsNameForATP,
       displayAgentName,
+      failSessionPackageJob,
     ],
   );
 
@@ -2049,14 +2046,6 @@ export default function AdminPage() {
     [],
   );
 
-  const [sessionPackageText, setSessionPackageText] = useState<string | null>(null);
-  const [sessionPackageLoading, setSessionPackageLoading] = useState(false);
-  const [sessionPackageError, setSessionPackageError] = useState<string | null>(null);
-  const [sessionPackageProgress, setSessionPackageProgress] = useState(0);
-  const sessionPackageProgressTimerRef = useRef<number | null>(null);
-  const [sessionPackageConfirmOpen, setSessionPackageConfirmOpen] = useState(false);
-  const [sessionPackageMode, setSessionPackageMode] = useState<'smart-agent' | 'erc8004'>('smart-agent');
-
   // Agent Skills (ATP agent_card_json config)
   const [agentSkillsLoading, setAgentSkillsLoading] = useState(false);
   const [agentSkillsSaving, setAgentSkillsSaving] = useState(false);
@@ -2067,24 +2056,11 @@ export default function AdminPage() {
 
   const [activeToggleSaving, setActiveToggleSaving] = useState(false);
   const [activeToggleError, setActiveToggleError] = useState<string | null>(null);
-  const hasSessionSmartAccount = Boolean(resolvePlainAddress(displayAgentAddress));
   const resolvedAgentUri =
     (typeof ensAgentMetadata.agentUri === 'string' && ensAgentMetadata.agentUri.trim()) ||
     (typeof (fetchedAgentInfo as any)?.agentUri === 'string' && String((fetchedAgentInfo as any).agentUri).trim()) ||
     registrationLatestTokenUri ||
     '';
-  const availableSessionPackageModes = useMemo(() => {
-    const modes: Array<'smart-agent' | 'erc8004'> = [];
-    if (hasSessionSmartAccount && hasSmartAgentBase) modes.push('smart-agent');
-    if (hasSessionSmartAccount && hasErc8004Extension) modes.push('erc8004');
-    return modes;
-  }, [hasSessionSmartAccount, hasSmartAgentBase, hasErc8004Extension]);
-
-  useEffect(() => {
-    if (!availableSessionPackageModes.includes(sessionPackageMode)) {
-      setSessionPackageMode(availableSessionPackageModes[0] ?? 'smart-agent');
-    }
-  }, [availableSessionPackageModes, sessionPackageMode]);
 
   const validateUrlLike = useCallback((value: string): string | null => {
     const trimmed = value.trim();
@@ -2458,46 +2434,6 @@ export default function AdminPage() {
     registrationA2aSkills,
     registrationA2aDomains,
   ]);
-
-  // Session package progress bar (60s max)
-  useEffect(() => {
-    if (!sessionPackageLoading) {
-      if (sessionPackageProgressTimerRef.current !== null) {
-        window.clearInterval(sessionPackageProgressTimerRef.current);
-        sessionPackageProgressTimerRef.current = null;
-      }
-      setSessionPackageProgress(0);
-      return;
-    }
-
-    const start = Date.now();
-    setSessionPackageProgress(0);
-
-    const id = window.setInterval(() => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min((elapsed / 60000) * 100, 100);
-      setSessionPackageProgress(pct);
-      if (pct >= 100) {
-        if (sessionPackageProgressTimerRef.current !== null) {
-          window.clearInterval(sessionPackageProgressTimerRef.current);
-          sessionPackageProgressTimerRef.current = null;
-        } else {
-          window.clearInterval(id);
-        }
-      }
-    }, 500);
-
-    sessionPackageProgressTimerRef.current = id;
-
-    return () => {
-      if (sessionPackageProgressTimerRef.current !== null) {
-        window.clearInterval(sessionPackageProgressTimerRef.current);
-        sessionPackageProgressTimerRef.current = null;
-      } else {
-        window.clearInterval(id);
-      }
-    };
-  }, [sessionPackageLoading]);
 
   const handleSaveRegistration = useCallback(
     async () => {
@@ -5901,7 +5837,7 @@ export default function AdminPage() {
 
                     <Button
                       variant="contained"
-                      onClick={() => setSessionPackageConfirmOpen(true)}
+                      onClick={openSessionPackageConfirm}
                       disabled={sessionPackageLoading}
                       sx={{ mb: 2 }}
                     >
@@ -5978,7 +5914,7 @@ export default function AdminPage() {
                     {/* Confirmation Dialog */}
                     <Dialog
                       open={sessionPackageConfirmOpen}
-                      onClose={() => setSessionPackageConfirmOpen(false)}
+                      onClose={closeSessionPackageConfirm}
                     >
                       <DialogTitle>
                         {sessionPackageMode === 'smart-agent'
@@ -5998,12 +5934,12 @@ export default function AdminPage() {
                         </Typography>
                       </DialogContent>
                       <DialogActions>
-                        <Button onClick={() => setSessionPackageConfirmOpen(false)}>
+                        <Button onClick={closeSessionPackageConfirm}>
                           Cancel
                         </Button>
                         <Button
                           onClick={() => {
-                            setSessionPackageConfirmOpen(false);
+                            closeSessionPackageConfirm();
                             if (sessionPackageMode === 'smart-agent') {
                               handleGenerateSmartAgentSessionPackage();
                             } else {

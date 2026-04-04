@@ -1,5 +1,6 @@
 import {
   buildEnsAgentCanonicalPayload,
+  buildEnsAgentSchemaDocument,
   buildEnsAgentMetadataRecords,
   computeEnsAgentMetadataDelta,
   parseEnsAgentMetadataRecords,
@@ -12,6 +13,7 @@ import {
 import { createPublicClient, encodeFunctionData, http, namehash, type Address } from 'viem';
 import { getChainById, requireChainEnvVar, getChainEnvVar } from './chainConfig';
 import { getIPFSStorage } from './ipfs';
+import { buildDidEns } from '../../shared/didEns';
 
 const ENS_REGISTRY_ABI = [
   {
@@ -94,6 +96,79 @@ async function loadJsonPayload(uri: string | null): Promise<unknown | null> {
   return await ipfs.getJson(uri);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
+}
+
+export type EnsAgentKbServiceEndpointProjection = {
+  name: string;
+  protocol: {
+    protocol: string;
+    serviceUrl: string;
+    protocolVersion?: string | null;
+    descriptor?: {
+      name?: string | null;
+      description?: string | null;
+      image?: string | null;
+      agentCardJson?: string | null;
+    } | null;
+    metadata?: Record<string, unknown> | null;
+  };
+};
+
+export type EnsAgentKbProjection = {
+  kind: 'ens';
+  chainId: number;
+  ensName: string;
+  didEns: string;
+  descriptor: {
+    kind: 'ens';
+    name?: string | null;
+    description?: string | null;
+    image?: string | null;
+    registrationJson: string | null;
+    nftMetadataJson: string | null;
+    registeredBy?: string | null;
+    registryNamespace: 'ens';
+    skills: string[];
+    domains: string[];
+  };
+  serviceEndpoints: EnsAgentKbServiceEndpointProjection[];
+  lifted: {
+    agentUri?: string | null;
+    description?: string | null;
+    image?: string | null;
+    supportedTrust: string[];
+    active?: boolean | null;
+    x402support?: boolean | null;
+    a2aEndpoint?: string | null;
+    mcpEndpoint?: string | null;
+    webEndpoint?: string | null;
+    agentWallet?: string | null;
+    name?: string | null;
+  };
+  raw: {
+    metadata: EnsAgentMetadataRecord;
+    textRecords: Record<string, string | null>;
+    payloads: {
+      agentDocument: unknown | null;
+      services: unknown | null;
+      registrations: unknown | null;
+    };
+  };
+};
+
 export async function getEnsAgentMetadataBundle(params: {
   ensName: string;
   chainId: number;
@@ -130,6 +205,130 @@ export async function getEnsAgentMetadataBundle(params: {
     metadata: parsed,
     rawProperties: metadata.properties,
     payloads,
+  };
+}
+
+export async function getEnsAgentKnowledgeBaseProjection(params: {
+  ensName: string;
+  chainId: number;
+}): Promise<EnsAgentKbProjection> {
+  const bundle = await getEnsAgentMetadataBundle(params);
+  const didEns = buildDidEns(bundle.chainId, bundle.ensName, { encode: false });
+  const canonical = asRecord(bundle.payloads.agentDocument);
+  const servicesPayload = asRecord(bundle.payloads.services);
+
+  const serviceEndpoints: EnsAgentKbServiceEndpointProjection[] = Object.entries(servicesPayload ?? {})
+    .map(([name, value]) => {
+      const entry = asRecord(value);
+      const serviceUrl = asTrimmedString(entry?.url);
+      if (!serviceUrl) return null;
+      return {
+        name,
+        protocol: {
+          protocol: name,
+          serviceUrl,
+          protocolVersion: asTrimmedString(entry?.version),
+          descriptor: {
+            name: asTrimmedString(entry?.label) ?? asTrimmedString(entry?.name),
+            description: asTrimmedString(entry?.description),
+            image: asTrimmedString(entry?.image),
+            agentCardJson: null,
+          },
+          metadata: entry,
+        },
+      };
+    })
+    .filter(Boolean) as EnsAgentKbServiceEndpointProjection[];
+
+  const a2aEndpoint =
+    serviceEndpoints.find((endpoint) => endpoint.name.toLowerCase() === 'a2a')?.protocol.serviceUrl ?? null;
+  const mcpEndpoint =
+    serviceEndpoints.find((endpoint) => endpoint.name.toLowerCase() === 'mcp')?.protocol.serviceUrl ?? null;
+  const webEndpoint =
+    serviceEndpoints.find((endpoint) => endpoint.name.toLowerCase() === 'web')?.protocol.serviceUrl ?? null;
+
+  const metadataEnvelope = {
+    ensName: bundle.ensName,
+    chainId: bundle.chainId,
+    resolver: bundle.resolver,
+    metadata: bundle.metadata,
+    textRecords: bundle.rawProperties,
+    payloads: bundle.payloads,
+  };
+
+  return {
+    kind: 'ens',
+    chainId: bundle.chainId,
+    ensName: bundle.ensName,
+    didEns,
+    descriptor: {
+      kind: 'ens',
+      name:
+        asTrimmedString(canonical?.name) ??
+        asTrimmedString(bundle.metadata.name) ??
+        asTrimmedString(bundle.rawProperties.name),
+      description:
+        asTrimmedString(canonical?.description) ??
+        asTrimmedString(bundle.metadata.description) ??
+        asTrimmedString(bundle.rawProperties.description),
+      image:
+        asTrimmedString(canonical?.image) ??
+        asTrimmedString(bundle.metadata.avatar) ??
+        asTrimmedString(bundle.rawProperties.avatar),
+      registrationJson: canonical ? JSON.stringify(canonical, null, 2) : null,
+      nftMetadataJson: JSON.stringify(metadataEnvelope, null, 2),
+      registeredBy: 'ens',
+      registryNamespace: 'ens',
+      skills: [],
+      domains: [],
+    },
+    serviceEndpoints,
+    lifted: {
+      agentUri:
+        asTrimmedString(canonical?.servicesUri) && asTrimmedString(bundle.metadata.agentUri)
+          ? asTrimmedString(bundle.metadata.agentUri)
+          : asTrimmedString(bundle.metadata.agentUri) ?? null,
+      description:
+        asTrimmedString(canonical?.description) ??
+        asTrimmedString(bundle.metadata.description) ??
+        null,
+      image:
+        asTrimmedString(canonical?.image) ??
+        asTrimmedString(bundle.metadata.avatar) ??
+        null,
+      supportedTrust:
+        asStringArray(canonical?.supportedTrust).length > 0
+          ? asStringArray(canonical?.supportedTrust)
+          : bundle.metadata.supportedTrust,
+      active:
+        typeof canonical?.active === 'boolean'
+          ? canonical.active
+          : bundle.metadata.active
+            ? bundle.metadata.active === 'true'
+            : null,
+      x402support:
+        typeof canonical?.x402Support === 'boolean'
+          ? canonical.x402Support
+          : bundle.metadata.x402Support
+            ? bundle.metadata.x402Support === 'true'
+            : null,
+      a2aEndpoint,
+      mcpEndpoint,
+      webEndpoint,
+      agentWallet:
+        asTrimmedString(canonical?.agentWallet) ??
+        asTrimmedString(bundle.metadata.agentWallet) ??
+        null,
+      name:
+        asTrimmedString(canonical?.name) ??
+        asTrimmedString(bundle.metadata.name) ??
+        null,
+    },
+    raw: {
+      metadata: bundle.metadata,
+      textRecords: bundle.rawProperties,
+      payloads: bundle.payloads,
+    },
   };
 }
 
@@ -175,6 +374,11 @@ export async function prepareEnsAgentMetadataUpdate(params: {
     ...currentBundle.metadata,
     ...params.metadata,
   };
+
+  if (!desiredMetadata.schema) {
+    const schemaDocument = buildEnsAgentSchemaDocument();
+    desiredMetadata.schema = await uploadJsonPayload(schemaDocument, `${ensName}-schema.json`);
+  }
 
   if (params.servicesPayload && Object.keys(params.servicesPayload).length > 0) {
     uploaded.services = await uploadJsonPayload(params.servicesPayload, `${ensName}-services.json`);

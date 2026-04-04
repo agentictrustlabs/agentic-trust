@@ -15,6 +15,10 @@
       "import": "./dist/client/walletSigningClient.js",
       "types": "./dist/client/walletSigningClient.d.ts"
     },
+    "./react": {
+      "import": "./dist/react.js",
+      "types": "./dist/react.d.ts"
+    },
     "./server": {
       "import": "./dist/server/index.js",
       "types": "./dist/server/index.d.ts"
@@ -30,10 +34,10 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo"
   },
   "dependencies": {
-    "@agentic-trust/agentic-trust-sdk": "workspace:*",
     "@agentic-trust/8004-sdk": "workspace:*",
-    "@agentic-trust/8122-sdk": "workspace:*",
     "@agentic-trust/8092-sdk": "workspace:*",
+    "@agentic-trust/8122-sdk": "workspace:*",
+    "@agentic-trust/agentic-trust-sdk": "workspace:*",
     "@agentic-trust/veramo-agent-extension": "workspace:*",
     "@ensdomains/ensjs": "^3.0.0",
     "@hashgraph/sdk": "^2.80.0",
@@ -54,7 +58,8 @@
     "web3.storage": "^4.5.5"
   },
   "peerDependencies": {
-    "@veramo/core": "^6.0.0"
+    "@veramo/core": "^6.0.0",
+    "react": "^18.3.0"
   },
   "peerDependenciesMeta": {
     "next": {
@@ -63,9 +68,11 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/react": "^19.2.14",
     "@vitest/coverage-v8": "^1.0.0",
     "eslint": "^8.0.0",
     "next": "^14.0.0",
+    "react": "^18.3.0",
     "tsx": "^4.0.0",
     "typescript": "^5.3.0",
     "vitest": "^1.0.0"

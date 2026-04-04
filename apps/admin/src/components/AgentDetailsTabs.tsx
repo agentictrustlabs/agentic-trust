@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogTitle, IconButton } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import type { AgentsPageAgent } from './AgentsPage';
+import { parseDidEns } from '@agentic-trust/core';
 import { grayscalePalette as palette } from '@/styles/palette';
 import { ASSOC_TYPE_OPTIONS } from '@/lib/association-types';
 import { decodeAssociationData } from '@/lib/association';
@@ -177,6 +178,29 @@ function parseJsonObject(text: string | null | undefined): any | null {
   if (!trimmed) return null;
   try {
     return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function parseEnsNameFromDid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  try {
+    const parsed = parseDidEns(raw);
+    return typeof parsed?.ensName === 'string' && parsed.ensName.trim() ? parsed.ensName.trim() : null;
+  } catch {
+    if (!raw.startsWith('did:ens:')) return null;
+    const fallback = raw.slice('did:ens:'.length).trim();
+    return fallback || null;
+  }
+}
+
+function formatObjectJson(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  try {
+    return JSON.stringify(value, null, 2);
   } catch {
     return null;
   }
@@ -1145,6 +1169,18 @@ const AgentDetailsTabs = ({
     [activeTab, identityTabs],
   );
 
+  const [ensIdentityBundle, setEnsIdentityBundle] = useState<{
+    ensName: string;
+    structured: Record<string, unknown> | null;
+    textRecords: Record<string, string | null> | null;
+    payloads: {
+      agentDocument: unknown | null;
+      services: unknown | null;
+      registrations: unknown | null;
+    } | null;
+  } | null>(null);
+  const [ensIdentityLoading, setEnsIdentityLoading] = useState(false);
+
   const identityTab: 'id8004' | 'id8122' | 'ens' | 'hol' = (activeIdentity?.kind ?? 'id8004') as any;
   const identityDid =
     activeIdentity?.did ??
@@ -1184,11 +1220,87 @@ const AgentDetailsTabs = ({
     [identityDid, identityTab],
   );
 
+  useEffect(() => {
+    if (identityTab !== 'ens') {
+      setEnsIdentityBundle(null);
+      setEnsIdentityLoading(false);
+      return;
+    }
+    const ensName =
+      (typeof (activeIdentity?.identityNode as any)?.ensName === 'string'
+        ? String((activeIdentity?.identityNode as any)?.ensName).trim()
+        : '') || parseEnsNameFromDid(identityDid);
+    const chainId =
+      activeIdentity?.chainId ??
+      (typeof (activeIdentity?.identityNode as any)?.chainId === 'number'
+        ? Number((activeIdentity?.identityNode as any)?.chainId)
+        : null) ??
+      (typeof agent.chainId === 'number' ? agent.chainId : null);
+    if (!ensName || !chainId) {
+      setEnsIdentityBundle(null);
+      setEnsIdentityLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setEnsIdentityLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/ens/agent-metadata?ensName=${encodeURIComponent(ensName)}&chainId=${encodeURIComponent(String(chainId))}`,
+          { cache: 'no-store' },
+        );
+        const json = (await res.json().catch(() => null)) as any;
+        if (cancelled) return;
+        if (!res.ok || !json?.ok) {
+          setEnsIdentityBundle(null);
+          return;
+        }
+        setEnsIdentityBundle({
+          ensName: typeof json?.ensName === 'string' ? json.ensName : ensName,
+          structured: json?.structured && typeof json.structured === 'object' ? json.structured : null,
+          textRecords: json?.textRecords && typeof json.textRecords === 'object' ? json.textRecords : null,
+          payloads: json?.payloads && typeof json.payloads === 'object' ? json.payloads : null,
+        });
+      } catch {
+        if (!cancelled) setEnsIdentityBundle(null);
+      } finally {
+        if (!cancelled) setEnsIdentityLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeIdentity, agent.chainId, identityDid, identityTab]);
+
   const identityDescriptor = useMemo(
     () => parseJsonObject(identityDescriptorJsonRaw),
     [identityDescriptorJsonRaw],
   );
+  const ensStructuredMetadata =
+    identityTab === 'ens' && ensIdentityBundle?.structured ? (ensIdentityBundle.structured as Record<string, unknown>) : null;
+  const ensTextRecords =
+    identityTab === 'ens' && ensIdentityBundle?.textRecords ? ensIdentityBundle.textRecords : null;
+  const ensAgentDocument =
+    identityTab === 'ens' && ensIdentityBundle?.payloads?.agentDocument
+      ? (ensIdentityBundle.payloads.agentDocument as Record<string, unknown>)
+      : null;
+  const ensServicesPayload =
+    identityTab === 'ens' && ensIdentityBundle?.payloads?.services
+      ? (ensIdentityBundle.payloads.services as Record<string, unknown>)
+      : null;
+  const ensRegistrationsPayload =
+    identityTab === 'ens' && ensIdentityBundle?.payloads?.registrations
+      ? ensIdentityBundle.payloads.registrations
+      : null;
   const identityDescription = useMemo(() => {
+    const fromEnsStructured =
+      typeof ensStructuredMetadata?.description === 'string'
+        ? String(ensStructuredMetadata.description)
+        : null;
+    const fromEnsDocument =
+      typeof ensAgentDocument?.description === 'string' ? String(ensAgentDocument.description) : null;
     const fromDescriptor =
       typeof (identityDescriptor as any)?.description === 'string'
         ? String((identityDescriptor as any).description)
@@ -1197,10 +1309,10 @@ const AgentDetailsTabs = ({
       typeof (agent as any)?.description === 'string'
         ? String((agent as any).description)
         : null;
-    const raw = (fromDescriptor ?? fromAgent) ?? null;
+    const raw = (fromEnsStructured ?? fromEnsDocument ?? fromDescriptor ?? fromAgent) ?? null;
     const trimmed = raw ? raw.trim() : '';
     return trimmed ? trimmed : null;
-  }, [identityDescriptor, (agent as any)?.description]);
+  }, [ensAgentDocument, ensStructuredMetadata, identityDescriptor, (agent as any)?.description]);
   const identityOnchainMetadata = useMemo(() => {
     const parsed = parseJsonObject(identityOnchainMetadataJsonRaw);
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
@@ -1237,18 +1349,37 @@ const AgentDetailsTabs = ({
     return null;
   }, [agent]);
 
+  const extractEnsPayloadServiceUrl = useCallback(
+    (serviceName: string): string | null => {
+      if (!ensServicesPayload) return null;
+      const entry = asRecord((ensServicesPayload as Record<string, unknown>)[serviceName]);
+      const url = typeof entry?.url === 'string' ? entry.url.trim() : '';
+      return url || null;
+    },
+    [ensServicesPayload],
+  );
+
   const identityA2aEndpoint =
+    (identityTab === 'ens' ? extractEnsPayloadServiceUrl('a2a') : null) ??
     extractKbServiceUrl('a2a') ??
     extractServiceEndpointFromDescriptorJson(identityDescriptorJsonRaw, 'a2a') ??
     ((identityTab === 'id8004' || identityTab === 'id8122') ? agent.a2aEndpoint : null);
   const identityMcpEndpoint =
+    (identityTab === 'ens' ? extractEnsPayloadServiceUrl('mcp') : null) ??
     extractKbServiceUrl('mcp') ??
     extractServiceEndpointFromDescriptorJson(identityDescriptorJsonRaw, 'mcp') ??
     ((identityTab === 'id8004' || identityTab === 'id8122') ? agent.mcpEndpoint : null);
 
+  const ensAgentDocumentPretty = useMemo(() => formatObjectJson(ensAgentDocument), [ensAgentDocument]);
+  const ensServicesPayloadPretty = useMemo(() => formatObjectJson(ensServicesPayload), [ensServicesPayload]);
+  const ensRegistrationsPayloadPretty = useMemo(
+    () => formatObjectJson(ensRegistrationsPayload),
+    [ensRegistrationsPayload],
+  );
+  const ensTextRecordsPretty = useMemo(() => formatObjectJson(ensTextRecords), [ensTextRecords]);
   const identityDescriptorPretty = useMemo(
-    () => formatJsonIfPossible(identityDescriptorJsonRaw),
-    [identityDescriptorJsonRaw],
+    () => (identityTab === 'ens' ? ensAgentDocumentPretty : formatJsonIfPossible(identityDescriptorJsonRaw)),
+    [ensAgentDocumentPretty, identityDescriptorJsonRaw, identityTab],
   );
 
   const identityRegistryInfo = useMemo(() => {
@@ -1733,24 +1864,26 @@ const AgentDetailsTabs = ({
                     </div>
                   </div>
                 )}
-            {(typeof (identityDescriptor as any)?.description === 'string' ? (identityDescriptor as any).description : agent.description) && (
+            {identityDescription && (
               <div>
                     <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Description</strong>
                 <p style={{ margin: 0, lineHeight: 1.6, color: palette.textPrimary }}>
-                  {typeof (identityDescriptor as any)?.description === 'string'
-                    ? (identityDescriptor as any).description
-                    : agent.description}
+                  {identityDescription}
                 </p>
               </div>
             )}
-                {(typeof (identityDescriptor as any)?.image === 'string' ? (identityDescriptor as any).image : agent.image) && (
+                {((typeof ensStructuredMetadata?.avatar === 'string' ? ensStructuredMetadata.avatar : null) ||
+                  (typeof ensAgentDocument?.image === 'string' ? ensAgentDocument.image : null) ||
+                  (typeof (identityDescriptor as any)?.image === 'string' ? (identityDescriptor as any).image : agent.image)) && (
                   <div>
                     <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Image</strong>
                     <a
                       href={
-                        (typeof (identityDescriptor as any)?.image === 'string'
-                          ? (identityDescriptor as any).image
-                          : agent.image) as string
+                        ((typeof ensStructuredMetadata?.avatar === 'string' ? ensStructuredMetadata.avatar : null) ||
+                          (typeof ensAgentDocument?.image === 'string' ? ensAgentDocument.image : null) ||
+                          (typeof (identityDescriptor as any)?.image === 'string'
+                            ? (identityDescriptor as any).image
+                            : agent.image)) as string
                       }
                       target="_blank"
                       rel="noopener noreferrer"
@@ -1767,19 +1900,105 @@ const AgentDetailsTabs = ({
                         e.currentTarget.style.textDecoration = 'none';
                       }}
                     >
-                      {typeof (identityDescriptor as any)?.image === 'string'
-                        ? (identityDescriptor as any).image
-                        : agent.image}
+                      {(typeof ensStructuredMetadata?.avatar === 'string' ? ensStructuredMetadata.avatar : null) ||
+                        (typeof ensAgentDocument?.image === 'string' ? ensAgentDocument.image : null) ||
+                        (typeof (identityDescriptor as any)?.image === 'string'
+                          ? (identityDescriptor as any).image
+                          : agent.image)}
                     </a>
                   </div>
                 )}
-                {(((identityOnchainMetadata as any).agentUri as string | undefined) || agent.agentUri) && (
+                {((typeof ensStructuredMetadata?.agentUri === 'string' ? ensStructuredMetadata.agentUri : null) ||
+                  (typeof ensTextRecords?.['agent-uri'] === 'string' ? ensTextRecords['agent-uri'] : null) ||
+                  ((identityOnchainMetadata as any).agentUri as string | undefined) ||
+                  agent.agentUri) && (
                   <div>
                     <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Agent URI</strong>
                     <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: palette.textPrimary, fontSize: '0.85rem' }}>
-                      {((identityOnchainMetadata as any).agentUri as string | undefined) || agent.agentUri}
+                      {(typeof ensStructuredMetadata?.agentUri === 'string' ? ensStructuredMetadata.agentUri : null) ||
+                        (typeof ensTextRecords?.['agent-uri'] === 'string' ? ensTextRecords['agent-uri'] : null) ||
+                        ((identityOnchainMetadata as any).agentUri as string | undefined) ||
+                        agent.agentUri}
                     </div>
                   </div>
+                )}
+                {identityTab === 'ens' && (
+                  <>
+                    {typeof ensStructuredMetadata?.class === 'string' && ensStructuredMetadata.class ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Class</strong>
+                        <div style={{ color: palette.textPrimary }}>{ensStructuredMetadata.class}</div>
+                      </div>
+                    ) : null}
+                    {typeof ensStructuredMetadata?.schema === 'string' && ensStructuredMetadata.schema ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Schema</strong>
+                        <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: palette.textPrimary, fontSize: '0.85rem' }}>
+                          {ensStructuredMetadata.schema}
+                        </div>
+                      </div>
+                    ) : null}
+                    {typeof ensStructuredMetadata?.services === 'string' && ensStructuredMetadata.services ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Services URI</strong>
+                        <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: palette.textPrimary, fontSize: '0.85rem' }}>
+                          {ensStructuredMetadata.services}
+                        </div>
+                      </div>
+                    ) : null}
+                    {typeof ensStructuredMetadata?.registrations === 'string' && ensStructuredMetadata.registrations ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Registrations URI</strong>
+                        <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: palette.textPrimary, fontSize: '0.85rem' }}>
+                          {ensStructuredMetadata.registrations}
+                        </div>
+                      </div>
+                    ) : null}
+                    {typeof ensStructuredMetadata?.agentWallet === 'string' && ensStructuredMetadata.agentWallet ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Agent Wallet</strong>
+                        <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: palette.textPrimary, fontSize: '0.85rem' }}>
+                          {ensStructuredMetadata.agentWallet}
+                        </div>
+                      </div>
+                    ) : null}
+                    {(typeof ensStructuredMetadata?.active === 'string' && ensStructuredMetadata.active) ||
+                    (typeof ensStructuredMetadata?.x402Support === 'string' && ensStructuredMetadata.x402Support) ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>ENS Flags</strong>
+                        <div style={{ color: palette.textPrimary }}>
+                          {typeof ensStructuredMetadata?.active === 'string' && ensStructuredMetadata.active
+                            ? `active=${ensStructuredMetadata.active}`
+                            : 'active=—'}
+                          {typeof ensStructuredMetadata?.x402Support === 'string' && ensStructuredMetadata.x402Support
+                            ? `, x402-support=${ensStructuredMetadata.x402Support}`
+                            : ''}
+                        </div>
+                      </div>
+                    ) : null}
+                    {Array.isArray(ensStructuredMetadata?.supportedTrust) && ensStructuredMetadata.supportedTrust.length > 0 ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Supported Trust</strong>
+                        <div style={{ color: palette.textPrimary }}>
+                          {(ensStructuredMetadata.supportedTrust as unknown[]).map((value) => String(value)).join(', ')}
+                        </div>
+                      </div>
+                    ) : null}
+                    {typeof ensTextRecords?.alias === 'string' && ensTextRecords.alias ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Alias</strong>
+                        <div style={{ color: palette.textPrimary }}>{ensTextRecords.alias}</div>
+                      </div>
+                    ) : null}
+                    {typeof ensTextRecords?.url === 'string' && ensTextRecords.url ? (
+                      <div>
+                        <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Profile URL</strong>
+                        <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: palette.textPrimary, fontSize: '0.85rem' }}>
+                          {ensTextRecords.url}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 )}
                 {identityTab === 'id8004' && agent.contractAddress && (
                   <div>
@@ -1797,7 +2016,7 @@ const AgentDetailsTabs = ({
                     </div>
                   </div>
                 )}
-                {(typeof (identityDescriptor as any)?.supportedTrust !== 'undefined' || agent.supportedTrust) && (
+                {((identityTab !== 'ens') && (typeof (identityDescriptor as any)?.supportedTrust !== 'undefined' || agent.supportedTrust)) && (
                   <div>
                     <strong style={{ color: palette.textSecondary, display: 'block', marginBottom: '0.25rem' }}>Supported Trust</strong>
                     <div style={{ color: palette.textPrimary }}>
@@ -1989,6 +2208,102 @@ const AgentDetailsTabs = ({
                 <div style={{ color: palette.textSecondary }}>No descriptor JSON available for this identity.</div>
               )}
             </div>
+            {identityTab === 'ens' && (
+              <>
+                <div
+                  style={{
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: '12px',
+                    padding: panePadding,
+                    backgroundColor: palette.surfaceMuted,
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: palette.textPrimary }}>
+                    ENS Text Records
+                  </h3>
+                  {ensIdentityLoading ? (
+                    <div style={{ color: palette.textSecondary }}>Loading ENS metadata...</div>
+                  ) : ensTextRecordsPretty ? (
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: 'ui-monospace, monospace',
+                        fontSize: '0.85rem',
+                        margin: 0,
+                        color: palette.textPrimary,
+                        maxHeight: '420px',
+                        overflow: 'auto',
+                      }}
+                    >
+                      {ensTextRecordsPretty}
+                    </pre>
+                  ) : (
+                    <div style={{ color: palette.textSecondary }}>No ENS text records available.</div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: '12px',
+                    padding: panePadding,
+                    backgroundColor: palette.surfaceMuted,
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: palette.textPrimary }}>
+                    Services Payload
+                  </h3>
+                  {ensServicesPayloadPretty ? (
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: 'ui-monospace, monospace',
+                        fontSize: '0.85rem',
+                        margin: 0,
+                        color: palette.textPrimary,
+                        maxHeight: '420px',
+                        overflow: 'auto',
+                      }}
+                    >
+                      {ensServicesPayloadPretty}
+                    </pre>
+                  ) : (
+                    <div style={{ color: palette.textSecondary }}>No services payload available.</div>
+                  )}
+                </div>
+                <div
+                  style={{
+                    border: `1px solid ${palette.border}`,
+                    borderRadius: '12px',
+                    padding: panePadding,
+                    backgroundColor: palette.surfaceMuted,
+                  }}
+                >
+                  <h3 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 600, color: palette.textPrimary }}>
+                    Registrations Payload
+                  </h3>
+                  {ensRegistrationsPayloadPretty ? (
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: 'ui-monospace, monospace',
+                        fontSize: '0.85rem',
+                        margin: 0,
+                        color: palette.textPrimary,
+                        maxHeight: '420px',
+                        overflow: 'auto',
+                      }}
+                    >
+                      {ensRegistrationsPayloadPretty}
+                    </pre>
+                  ) : (
+                    <div style={{ color: palette.textSecondary }}>No registrations payload available.</div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 

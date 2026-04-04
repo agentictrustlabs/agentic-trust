@@ -18,6 +18,7 @@ import {
   sendSponsoredUserOperation,
   waitForUserOperationReceipt,
 } from '@agentic-trust/core/client';
+import { buildPrepareEnsAgentMetadataRequest } from '@agentic-trust/core';
 import { DEFAULT_CHAIN_ID, getEnsOrgName } from '@agentic-trust/core/server';
 import { buildDidEnsFromAgentAndOrg } from '@/app/api/names/_lib/didEns';
 
@@ -162,6 +163,17 @@ export default function SmartAgentRegistrationPage() {
   });
   const [agentUrlAutofillDisabled, setAgentUrlAutofillDisabled] = useState(false);
   const previousDefaultAgentUrlRef = React.useRef<string>('');
+  const [serviceForm, setServiceForm] = useState({ a2aUrl: '', mcpUrl: '' });
+  const [supportedTrust, setSupportedTrust] = useState<string[]>([]);
+  const [metadataFlags, setMetadataFlags] = useState({
+    active: true,
+    x402Support: false,
+  });
+
+  const defaultA2AEndpoint = useMemo(() => {
+    const base = String(form.agentUrl || '').trim().replace(/\/+$/, '');
+    return base ? `${base}/.well-known/agent-card.json` : '';
+  }, [form.agentUrl]);
 
   const handleResetAgentUrlToDefault = useCallback(() => {
     const next = buildDefaultAgentUrl(form.agentName);
@@ -352,6 +364,8 @@ export default function SmartAgentRegistrationPage() {
       const agentLabel = form.agentName.trim();
       const baseUrl = String(form.agentUrl || '').trim();
       const agentDescription = String(form.description || '').trim();
+      const resolvedA2AUrl = String(serviceForm.a2aUrl || '').trim() || defaultA2AEndpoint;
+      const resolvedMcpUrl = String(serviceForm.mcpUrl || '').trim();
 
       // ENS on-chain registration (same endpoints/shape as 8004 flow).
       if (isL1ChainId(selectedChainId)) {
@@ -525,6 +539,62 @@ export default function SmartAgentRegistrationPage() {
         }
       })();
 
+      setSuccess('Preparing ENS Agent metadata package...');
+      const ensMetadataBody = buildPrepareEnsAgentMetadataRequest({
+        ensName: ensFullNamePreview,
+        chainId: selectedChainId,
+        agentName: agentLabel,
+        agentWallet: aaAddr,
+        agentUrl: baseUrl,
+        description: agentDescription,
+        image: form.image,
+        endpoints: [
+          ...(baseUrl ? [{ name: 'web', endpoint: baseUrl }] : []),
+          ...(resolvedA2AUrl ? [{ name: 'a2a', endpoint: resolvedA2AUrl }] : []),
+          ...(resolvedMcpUrl ? [{ name: 'mcp', endpoint: resolvedMcpUrl }] : []),
+        ],
+        supportedTrust,
+        active: metadataFlags.active,
+        x402Support: metadataFlags.x402Support,
+        uaid,
+      });
+      const metadataRes = await fetch('/api/ens/agent-metadata', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(ensMetadataBody),
+      });
+      const metadataJson = (await metadataRes.json().catch(() => null)) as any;
+      if (!metadataRes.ok) {
+        throw new Error(metadataJson?.error || metadataJson?.message || 'Failed to prepare ENS Agent metadata update.');
+      }
+      const metadataCallsRaw = Array.isArray(metadataJson?.calls) ? (metadataJson.calls as any[]) : [];
+      const metadataCalls = metadataCallsRaw
+        .map((c) => {
+          const to = typeof c?.to === 'string' ? (c.to as `0x${string}`) : null;
+          const data = typeof c?.data === 'string' ? (c.data as `0x${string}`) : null;
+          if (!to || !data) return null;
+          let value: bigint | undefined = undefined;
+          if (c?.value !== null && c?.value !== undefined) {
+            try {
+              value = BigInt(c.value);
+            } catch {
+              value = undefined;
+            }
+          }
+          return { to, data, value };
+        })
+        .filter(Boolean) as Array<{ to: `0x${string}`; data: `0x${string}`; value?: bigint }>;
+      if (metadataCalls.length > 0) {
+        setSuccess('MetaMask signature: publish ENS Agent metadata');
+        const uoHash = await sendSponsoredUserOperation({
+          bundlerUrl,
+          chain,
+          accountClient,
+          calls: metadataCalls,
+        });
+        await waitForUserOperationReceipt({ bundlerUrl, chain, hash: uoHash });
+      }
+
       setSuccess(`Smart Agent created: ${ensFullNamePreview}`);
       openCompletionModal({
         smartAccount: aaAddr,
@@ -560,7 +630,13 @@ export default function SmartAgentRegistrationPage() {
     ensFullNamePreview,
     ensAvailable,
     ensOrgName,
+    defaultA2AEndpoint,
+    metadataFlags.active,
+    metadataFlags.x402Support,
     openCompletionModal,
+    serviceForm.a2aUrl,
+    serviceForm.mcpUrl,
+    supportedTrust,
   ]);
 
   const renderStep = () => {
@@ -703,6 +779,68 @@ export default function SmartAgentRegistrationPage() {
                   Reset
                 </button>
               </div>
+
+              <label style={labelStyle}>A2A URL</label>
+              <input
+                value={serviceForm.a2aUrl}
+                onChange={(e) => setServiceForm((prev) => ({ ...prev, a2aUrl: e.target.value }))}
+                placeholder={defaultA2AEndpoint || 'https://your-agent.com/.well-known/agent-card.json'}
+                style={fieldStyle}
+              />
+
+              <label style={labelStyle}>MCP URL</label>
+              <input
+                value={serviceForm.mcpUrl}
+                onChange={(e) => setServiceForm((prev) => ({ ...prev, mcpUrl: e.target.value }))}
+                placeholder="https://your-agent.com/api/mcp"
+                style={fieldStyle}
+              />
+
+              <label style={labelStyle}>Flags</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', minWidth: 0 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={metadataFlags.active}
+                    onChange={(e) =>
+                      setMetadataFlags((prev) => ({ ...prev, active: e.target.checked }))
+                    }
+                  />
+                  <span>Active</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={metadataFlags.x402Support}
+                    onChange={(e) =>
+                      setMetadataFlags((prev) => ({ ...prev, x402Support: e.target.checked }))
+                    }
+                  />
+                  <span>x402 support</span>
+                </label>
+              </div>
+
+              <label style={labelStyle}>Supported trust</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', minWidth: 0 }}>
+                {[
+                  ['reputation', 'Reputation-based Trust'],
+                  ['crypto-economic', 'Crypto-economic Trust'],
+                  ['tee-attestation', 'TEE Attestation Trust'],
+                ].map(([value, label]) => (
+                  <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={supportedTrust.includes(value)}
+                      onChange={(e) =>
+                        setSupportedTrust((prev) =>
+                          e.target.checked ? [...prev, value] : prev.filter((item) => item !== value),
+                        )
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </>
         );
@@ -727,6 +865,19 @@ export default function SmartAgentRegistrationPage() {
               </div>
               <div>
                 Agent URL: <code style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{form.agentUrl || '—'}</code>
+              </div>
+              <div>
+                A2A: <code style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{serviceForm.a2aUrl || defaultA2AEndpoint || '—'}</code>
+              </div>
+              <div>
+                MCP: <code style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}>{serviceForm.mcpUrl || '—'}</code>
+              </div>
+              <div>
+                Flags: <b>{metadataFlags.active ? 'active' : 'inactive'}</b>
+                {metadataFlags.x402Support ? ', x402-support' : ''}
+              </div>
+              <div>
+                Supported trust: <b>{supportedTrust.length > 0 ? supportedTrust.join(', ') : '—'}</b>
               </div>
             </div>
           </>

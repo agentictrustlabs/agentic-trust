@@ -80,6 +80,10 @@ import { parseEthrDid } from './accounts';
 import { uploadRegistration, createRegistrationJSON } from './agentRegistration';
 import { generateHcs14UaidDidTarget } from './uaid';
 import { buildDidEthr } from '../../shared/didEthr';
+import {
+  buildEnsNameFromParts,
+  buildPrepareEnsAgentMetadataRequest,
+} from '../../shared/ensAgentRegistration';
 import { createPublicClient, encodeFunctionData, http } from 'viem';
 import type { Address } from 'viem';
 import { getAdminApp } from '../userApps/adminApp';
@@ -90,6 +94,7 @@ import { addToL1OrgPK } from './names';
 import { sendSponsoredUserOperation, waitForUserOperationReceipt } from '../../client/accountClient';
 import type { Chain } from 'viem';
 import { getENSClient } from '../singletons/ensClient';
+import { prepareEnsAgentMetadataUpdate } from './ensMetadata';
 import { rethrowDiscoveryError } from './discoveryErrors';
 
 const identityRegistryAbi: any = (IdentityRegistryABIJson as any).default ?? IdentityRegistryABIJson;
@@ -979,6 +984,50 @@ export class AgentsAPI {
     if (params.ensOptions?.enabled && params.ensOptions.orgName) {
       try {
         const ensClient = await getENSClient(chainId);
+        const ensName = buildEnsNameFromParts(params.agentName, params.ensOptions.orgName);
+        let ensUaid: string | undefined;
+        try {
+          const didEthr = buildDidEthr(chainId, params.agentAccount, { encode: false });
+          const uid = didEthr;
+          const nativeId = `eip155:${chainId}:${params.agentAccount}`;
+          const domain =
+            typeof params.agentUrl === 'string' && params.agentUrl.trim()
+              ? (() => {
+                  try {
+                    return new URL(params.agentUrl).hostname;
+                  } catch {
+                    return undefined;
+                  }
+                })()
+              : undefined;
+          const generated = await generateHcs14UaidDidTarget({
+            targetDid: didEthr,
+            routing: {
+              registry: 'erc-8004',
+              proto: 'a2a',
+              nativeId,
+              uid,
+              domain,
+            },
+          });
+          ensUaid = generated.uaid;
+        } catch {
+          ensUaid = undefined;
+        }
+        const ensMetadataPlan = buildPrepareEnsAgentMetadataRequest({
+          ensName,
+          chainId,
+          agentName: params.agentName,
+          agentWallet: params.agentAccount,
+          agentUrl: params.agentUrl,
+          description: params.description,
+          image: params.image,
+          endpoints: params.endpoints,
+          supportedTrust: params.supportedTrust,
+          active: true,
+          agentId,
+          uaid: ensUaid,
+        });
         if (isL1(chainId)) {
           await addToL1OrgPK({
             orgName: params.ensOptions.orgName,
@@ -988,29 +1037,22 @@ export class AgentsAPI {
             chainId,
           });
 
-          const { calls: infoCalls } = await ensClient.prepareSetAgentNameInfoCalls({
-            orgName: params.ensOptions.orgName,
-            agentName: params.agentName,
-            agentAddress: params.agentAccount,
-            agentUrl: params.agentUrl,
-            agentDescription: params.description,
-          });
+          const preparedMetadataUpdate = await prepareEnsAgentMetadataUpdate(ensMetadataPlan);
+          const infoCalls = preparedMetadataUpdate.calls.map((call) => ({
+            to: call.to,
+            data: call.data,
+            value: (call as any).value !== undefined ? BigInt((call as any).value) : 0n,
+          }));
 
           let nextNonce = await getAccountNonce(accountClient);
 
           if (infoCalls.length > 0) {
-            const formattedCalls = infoCalls.map((call) => ({
-              to: call.to,
-              data: call.data,
-              value: (call as any).value ?? 0n,
-            }));
-
-            console.info('[createAgentWithSmartAccountOwnerUsingPrivateKey] Submitting L1 ENS metadata calls');
+            console.info('[createAgentWithSmartAccountOwnerUsingPrivateKey] Submitting L1 ENS Agent metadata calls');
             await sendUserOpWithTimeout({
               bundlerUrl,
               chain,
               accountClient,
-              calls: formattedCalls,
+              calls: infoCalls,
               nonce: nextNonce,
             });
 
@@ -1050,27 +1092,20 @@ export class AgentsAPI {
             }
           }
 
-          const { calls: infoCalls } = await ensClient.prepareAddAgentInfoCalls({
-            orgName: params.ensOptions.orgName,
-            agentName: params.agentName,
-            agentAddress: params.agentAccount,
-            agentUrl: params.agentUrl || '',
-            agentDescription: params.description,
-          });
+          const preparedMetadataUpdate = await prepareEnsAgentMetadataUpdate(ensMetadataPlan);
+          const infoCalls = preparedMetadataUpdate.calls.map((call) => ({
+            to: call.to,
+            data: call.data,
+            value: (call as any).value !== undefined ? BigInt((call as any).value) : 0n,
+          }));
 
           if (infoCalls.length > 0) {
-            const formattedInfoCalls = infoCalls.map((call) => ({
-              to: call.to,
-              data: call.data,
-              value: (call as any).value ?? 0n,
-            }));
-
-            console.info('[createAgentWithSmartAccountOwnerUsingPrivateKey] Submitting L2 ENS metadata calls');
+            console.info('[createAgentWithSmartAccountOwnerUsingPrivateKey] Submitting L2 ENS Agent metadata calls');
             await sendUserOpWithTimeout({
               bundlerUrl,
               chain,
               accountClient,
-              calls: formattedInfoCalls,
+              calls: infoCalls,
               nonce: nextNonce,
             });
 

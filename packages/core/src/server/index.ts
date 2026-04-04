@@ -24,6 +24,15 @@ export {
 export {
   createAgentDirectRouteHandler,
 } from '../api/agents/directNext';
+export {
+  ensAgentLookupRouteHandler,
+  prepareL1NameInfoRouteHandler,
+  prepareL2NameInfoRouteHandler,
+  addToL1OrgRouteHandler,
+  addToL2OrgRouteHandler,
+  setL1NameInfoPkRouteHandler,
+  addToL1OrgPkRouteHandler,
+} from '../api/admin/next';
 
 // Express-compatible API route handlers and router helpers
 export {
@@ -194,7 +203,12 @@ export {
 } from './singletons/ensClient';
 export {
   getEnsAgentMetadataBundle,
+  getEnsAgentKnowledgeBaseProjection,
   prepareEnsAgentMetadataUpdate,
+} from './lib/ensMetadata';
+export type {
+  EnsAgentKbProjection,
+  EnsAgentKbServiceEndpointProjection,
 } from './lib/ensMetadata';
 
 // API helpers for server routes (discovery/search)
@@ -279,6 +293,14 @@ export {
   type SetL1NameInfoPKParams,
   type ExecuteEnsTxResult,
 } from './lib/names';
+export {
+  buildEnsName,
+  getEnsAgentLookup,
+  normalizeOrgName,
+  toJsonSafeCalls,
+  toJsonSafeReceipt,
+  type EnsAgentLookup,
+} from './lib/ensAdmin';
 
 // Session package utilities (Node.js fs access)
 export type { DelegationSetup } from './lib/sessionPackage';
