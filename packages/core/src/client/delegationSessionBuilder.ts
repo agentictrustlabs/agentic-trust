@@ -44,6 +44,8 @@ import {
   getChainById,
 } from '../server/lib/chainConfig';
 import { sendSponsoredUserOperation, waitForUserOperationReceipt } from './accountClient';
+import { createSessionKeyAndSessionAccount } from './sessionAccountInit';
+import { signAgentDelegation } from './delegationSigning';
 
 export const DEFAULT_SELECTOR = encodeFunctionData({
   abi: ValidationRegistryAbi as any,
@@ -663,38 +665,183 @@ export type GenerateSessionPackageParams = {
 export async function generateSessionPackage(
   params: GenerateSessionPackageParams,
 ): Promise<SessionPackage> {
-  const session = await createSessionWalletAndAccount({
+  const sessionInit = await createSessionKeyAndSessionAccount({
+    chainId: params.chainId,
+    rpcUrl: params.rpcUrl,
+    bundlerUrl: params.bundlerUrl,
+    ensureSessionAccountDeployed: true,
+  });
+  const session = sessionInit.artifacts;
+
+  // Keep legacy behavior: attempt to deploy the principal smart account if missing.
+  await (async () => {
+    const { chainId, agentAccount, provider, ownerAddress } = params;
+    const rpcUrl = session.rpcUrl;
+    await switchChain(provider, chainId, rpcUrl);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const walletClient = createWalletClient({
+      chain: session.chain,
+      transport: custom(provider),
+      account: ownerAddress as Address,
+    });
+    const principalSmartAccount = await toMetaMaskSmartAccount({
+      address: agentAccount,
+      client: session.publicClient as any,
+      implementation: Implementation.Hybrid,
+      signer: { walletClient: walletClient as any },
+    } as any);
+    const aaCode = await session.publicClient.getBytecode({ address: agentAccount });
+    const aaDeployed = !!aaCode && aaCode !== '0x';
+    if (!aaDeployed) {
+      const hash = await sendSponsoredUserOperation({
+        bundlerUrl: session.bundlerUrl,
+        chain: session.chain,
+        accountClient: principalSmartAccount as any,
+        calls: [{ to: zeroAddress }],
+      });
+      await waitForUserOperationReceipt({ bundlerUrl: session.bundlerUrl, chain: session.chain, hash });
+    }
+  })();
+
+  const delegation = await signAgentDelegation({
     chainId: params.chainId,
     agentAccount: params.agentAccount,
-    provider: params.provider,
     ownerAddress: params.ownerAddress,
-    bundlerUrl: params.bundlerUrl,
-    rpcUrl: params.rpcUrl,
-  });
-
-  const delegation = await buildAgentDelegation({
-    session,
-    selector: params.selector,
+    provider: params.provider,
+    delegateeAA: session.sessionAA,
+    rpcUrl: session.rpcUrl,
+    selector: params.selector ?? DEFAULT_SELECTOR,
     validationRegistry: params.validationRegistry,
     associationsProxy: params.associationsProxy,
     includeValidationScope: true,
     includeAssociationScope: true,
     includeAgentAccountSignatureScope: true,
-    performDelegationTest: params.performDelegationTest ?? true,
   });
 
-  await approveErc8004SessionOperator({
-    agentId: params.agentId,
-    identityRegistry: params.identityRegistry,
-    sessionAA: session.sessionAA,
-    session,
-  });
+  // Approve the session AA as operator in the identity registry (client-authorized call).
+  await (async () => {
+    const identityRegistry = params.identityRegistry ?? getIdentityRegistryAddress(params.chainId);
+    if (!identityRegistry || identityRegistry === zeroAddress) {
+      throw new Error(
+        `Missing IdentityRegistry address for chain ${params.chainId}. ` +
+          `Set NEXT_PUBLIC_AGENTIC_TRUST_IDENTITY_REGISTRY or NEXT_PUBLIC_AGENTIC_TRUST_IDENTITY_REGISTRY_<CHAIN_SUFFIX> in your env.`,
+      );
+    }
+
+    await switchChain(params.provider, params.chainId, session.rpcUrl);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const walletClient = createWalletClient({
+      chain: session.chain,
+      transport: custom(params.provider),
+      account: params.ownerAddress as Address,
+    });
+    const principalSmartAccount = await toMetaMaskSmartAccount({
+      address: params.agentAccount,
+      client: session.publicClient as any,
+      implementation: Implementation.Hybrid,
+      signer: { walletClient: walletClient as any },
+    } as any);
+
+    const approveCalldata = encodeFunctionData({
+      abi: IdentityRegistryAbi as any,
+      functionName: 'approve',
+      args: [session.sessionAA, BigInt(params.agentId)],
+    });
+
+    const hash = await sendSponsoredUserOperation({
+      bundlerUrl: session.bundlerUrl,
+      chain: session.chain,
+      accountClient: principalSmartAccount as any,
+      calls: [{ to: identityRegistry, data: approveCalldata }],
+    });
+    await waitForUserOperationReceipt({ bundlerUrl: session.bundlerUrl, chain: session.chain, hash });
+  })();
+
+  // Preserve legacy optional on-chain delegation test behavior.
+  const performTest = params.performDelegationTest ?? true;
+  const validationRegistry = params.validationRegistry ?? getValidationRegistryAddress(params.chainId);
+  const delegationRedeemData =
+    performTest && validationRegistry
+      ? await (async (): Promise<`0x${string}` | undefined> => {
+          try {
+            const sessionAccountClient = await toMetaMaskSmartAccount({
+              address: session.sessionAA,
+              client: session.publicClient as any,
+              implementation: Implementation.Hybrid,
+              signer: { account: session.sessionKeyAccount },
+              delegation: {
+                delegation: delegation.signedDelegation,
+                delegator: params.agentAccount,
+              },
+            } as any);
+
+            const testCallData = encodeFunctionData({
+              abi: ValidationRegistryAbi as any,
+              functionName: 'getIdentityRegistry',
+              args: [],
+            });
+
+            const delegationMessage = {
+              delegate: (delegation.signedDelegation as any).delegate,
+              delegator: (delegation.signedDelegation as any).delegator,
+              authority: (delegation.signedDelegation as any).authority,
+              caveats: (delegation.signedDelegation as any).caveats,
+              salt: (delegation.signedDelegation as any).salt,
+              signature: (delegation.signedDelegation as any).signature,
+            };
+
+            const includedExecutions = [
+              {
+                target: validationRegistry,
+                value: BigInt(0),
+                callData: testCallData,
+              },
+            ];
+
+            const redeemData = DelegationManager.encode.redeemDelegations({
+              delegations: [[delegationMessage]],
+              modes: [ExecutionMode.SingleDefault],
+              executions: [includedExecutions],
+            }) as `0x${string}`;
+
+            const testHash = await sendSponsoredUserOperation({
+              bundlerUrl: session.bundlerUrl,
+              chain: session.chain,
+              accountClient: sessionAccountClient as any,
+              calls: [
+                {
+                  to: session.sessionAA,
+                  data: redeemData,
+                  value: 0n,
+                },
+              ],
+            });
+            await waitForUserOperationReceipt({ bundlerUrl: session.bundlerUrl, chain: session.chain, hash: testHash });
+
+            await session.publicClient.readContract({
+              address: validationRegistry,
+              abi: ValidationRegistryAbi as any,
+              functionName: 'getIdentityRegistry',
+              args: [],
+            });
+
+            return redeemData;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('Invalid Smart Account nonce') || message.includes('AA25 invalid account deployment')) {
+              console.warn('*********** sessionPackageBuilder: Delegation test skipped:', message);
+              return undefined;
+            }
+            throw new Error(`Delegation test failed: ${message}`);
+          }
+        })()
+      : undefined;
 
   return buildDelegationSessionPackage({
     kind: 'delegation-8004',
     agentId: params.agentId,
     chainId: session.chainId,
-    aa: session.agentAccount,
+    aa: params.agentAccount,
     sessionAA: session.sessionAA,
     selector: delegation.selector,
     scDelegation: delegation.scDelegation,
@@ -702,7 +849,7 @@ export async function generateSessionPackage(
     entryPoint: session.entryPoint,
     bundlerUrl: session.bundlerUrl,
     signedDelegation: delegation.signedDelegation,
-    delegationRedeemData: delegation.delegationRedeemData,
+    delegationRedeemData,
   }) as SessionPackage;
 }
 
@@ -725,31 +872,62 @@ export type GenerateSmartAgentDelegationSessionPackageParams = {
 export async function generateSmartAgentDelegationSessionPackage(
   params: GenerateSmartAgentDelegationSessionPackageParams,
 ): Promise<SmartAgentDelegationSessionPackage> {
-  const session = await createSessionWalletAndAccount({
+  const sessionInit = await createSessionKeyAndSessionAccount({
+    chainId: params.chainId,
+    rpcUrl: params.rpcUrl,
+    bundlerUrl: params.bundlerUrl,
+    ensureSessionAccountDeployed: true,
+  });
+  const session = sessionInit.artifacts;
+
+  // Keep legacy behavior: attempt to deploy the principal smart account if missing.
+  await (async () => {
+    await switchChain(params.provider, params.chainId, session.rpcUrl);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const walletClient = createWalletClient({
+      chain: session.chain,
+      transport: custom(params.provider),
+      account: params.ownerAddress as Address,
+    });
+    const principalSmartAccount = await toMetaMaskSmartAccount({
+      address: params.agentAccount,
+      client: session.publicClient as any,
+      implementation: Implementation.Hybrid,
+      signer: { walletClient: walletClient as any },
+    } as any);
+    const aaCode = await session.publicClient.getBytecode({ address: params.agentAccount });
+    const aaDeployed = !!aaCode && aaCode !== '0x';
+    if (!aaDeployed) {
+      const hash = await sendSponsoredUserOperation({
+        bundlerUrl: session.bundlerUrl,
+        chain: session.chain,
+        accountClient: principalSmartAccount as any,
+        calls: [{ to: zeroAddress }],
+      });
+      await waitForUserOperationReceipt({ bundlerUrl: session.bundlerUrl, chain: session.chain, hash });
+    }
+  })();
+
+  const delegation = await signAgentDelegation({
     chainId: params.chainId,
     agentAccount: params.agentAccount,
-    provider: params.provider,
     ownerAddress: params.ownerAddress,
-    bundlerUrl: params.bundlerUrl,
-    rpcUrl: params.rpcUrl,
-  });
-
-  const delegation = await buildAgentDelegation({
-    session,
+    provider: params.provider,
+    delegateeAA: session.sessionAA,
+    rpcUrl: session.rpcUrl,
     selector: params.selector ?? SMART_AGENT_DEFAULT_SELECTOR,
     validationRegistry: params.validationRegistry,
     associationsProxy: params.associationsProxy,
     includeValidationScope: false,
     includeAssociationScope: false,
     includeAgentAccountSignatureScope: true,
-    performDelegationTest: params.performDelegationTest ?? true,
   });
 
   return buildDelegationSessionPackage({
     kind: 'delegation-smart-agent',
     chainId: session.chainId,
-    aa: session.agentAccount,
-    agentAccount: session.agentAccount,
+    aa: params.agentAccount,
+    agentAccount: params.agentAccount,
     uaid: params.uaid,
     did: params.did,
     ensName: params.ensName,
@@ -760,6 +938,5 @@ export async function generateSmartAgentDelegationSessionPackage(
     entryPoint: session.entryPoint,
     bundlerUrl: session.bundlerUrl,
     signedDelegation: delegation.signedDelegation,
-    delegationRedeemData: delegation.delegationRedeemData,
   }) as SmartAgentDelegationSessionPackage;
 }

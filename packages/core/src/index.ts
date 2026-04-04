@@ -149,7 +149,10 @@ export {
 export { generateA2AOnlySessionPackage } from './client/a2aOnlySessionPackageBuilder';
 export {
   createSessionWalletAndAccount,
+  createSessionKeyAndSessionAccount,
   buildAgentDelegation,
+  signAgentDelegation,
+  assembleSmartAgentSessionPackage,
   buildDelegationSessionPackage,
   generateSessionPackage,
   generateSmartAgentDelegationSessionPackage,
@@ -163,6 +166,12 @@ export type {
   BuildAgentDelegationParams,
   BuildDelegationSessionPackageParams,
   CreateSessionWalletAndAccountParams,
+  CreateSessionKeyAndSessionAccountParams,
+  SessionAccountInitArtifacts,
+  SessionAccountInitPublic,
+  SignAgentDelegationParams,
+  DelegationSignatureArtifacts,
+  AssembleSmartAgentSessionPackageParams,
   GenerateSessionPackageParams,
   GenerateSmartAgentDelegationSessionPackageParams,
   SessionWalletAndAccountArtifacts,

@@ -125,6 +125,80 @@ ERC‑8004 domain clients directly via `@agentic-trust/agentic-trust-sdk` and
 entrypoint (`@agentic-trust/core/server`) wires these for you via singletons
 such as `getIdentityRegistryClient`, `getENSClient`, and `getReputationRegistryClient`.
 
+### Session packages (split 3-call flow)
+
+For Smart Agents (principal AA + ENS, no ERC‑8004 extension), the recommended flow is split so:
+- the **agent-service** creates + stores the session keypair
+- the **web client** signs the delegation with the principal wallet
+- the **agent-service** assembles and persists the final session package
+
+#### SDK calls
+
+- **(1) Agent-service: create session wallet + session AA (ensure deployed)**:
+
+```ts
+import { createSessionKeyAndSessionAccount } from '@agentic-trust/core';
+
+const { artifacts, pub } = await createSessionKeyAndSessionAccount({
+  chainId: 11155111,
+  // optional overrides:
+  // rpcUrl, bundlerUrl, sessionPrivateKey, deploySalt
+  ensureSessionAccountDeployed: true,
+});
+
+// Store artifacts.sessionPrivateKey / artifacts.sessionKey server-side.
+// Send pub.sessionAA to the web client.
+```
+
+- **(2) Web client: sign delegation (needs only sessionAA, no session keys)**:
+
+```ts
+import { signAgentDelegation, SMART_AGENT_DELEGATION_SELECTOR } from '@agentic-trust/core';
+
+const sig = await signAgentDelegation({
+  chainId: 11155111,
+  agentAccount: principalSmartAccount, // delegator AA
+  ownerAddress: principalEoa,          // wallet controlling the AA
+  provider: window.ethereum,
+  delegateeAA: sessionAA,              // from step (1)
+  selector: SMART_AGENT_DELEGATION_SELECTOR,
+  includeValidationScope: false,
+  includeAssociationScope: false,
+  includeAgentAccountSignatureScope: true,
+});
+
+// Send sig.signedDelegation (+ selector/scDelegation) back to the agent-service.
+```
+
+- **(3) Agent-service: assemble final package**:
+
+```ts
+import { assembleSmartAgentSessionPackage } from '@agentic-trust/core';
+
+const pkg = assembleSmartAgentSessionPackage({
+  chainId: 11155111,
+  agentAccount: principalSmartAccount,
+  sessionAA,
+  sessionKey: artifacts.sessionKey,     // server-only
+  entryPoint: artifacts.entryPoint,
+  bundlerUrl: artifacts.bundlerUrl,
+  selector: sig.selector,
+  signedDelegation: sig.signedDelegation,
+  scDelegation: sig.scDelegation,
+  uaid,
+  did,
+  ensName,
+});
+```
+
+#### Recommended HTTP endpoints between apps
+
+- **Agent-service**:
+  - `POST /session/init` → returns `{ chainId, sessionAA }` and stores the session key server-side.
+  - `POST /session/complete` with `{ signedDelegation, selector, scDelegation?, sessionAA }` → assembles + stores the session package.
+- **Web client**:
+  - Calls `signAgentDelegation(...)` locally, then POSTs the result to `/session/complete`.
+
 ## Dependencies
 
 - `@agentic-trust/agentic-trust-sdk` - Agentic Trust SDK (workspace dependency)
